@@ -1,12 +1,14 @@
 #include "VoidEngineImp.h"
 #include <iostream>
 
-#include "../../Common/CBaseEngine.h"
-#include "../../Common/MathHelper.h"
-#include "../../Common/UploadBuffer.h"
-#include "../../Common/GeometryGenerator.h"
+#include "CBaseEngine.h"
+#include "../Common/MathHelper.h"
+#include "../Common/UploadBuffer.h"
+#include "../Common/GeometryGenerator.h"
 #include "../SSAO/Ssao.h"
 #include "../ShadowMap/ShadowMap.h"
+
+const int gNumFrameResources = 3;
 
 CVoidEgine::CVoidEgine(HINSTANCE hInstance, HWND wnd)
 	: CBaseEngine(hInstance, wnd)
@@ -61,6 +63,12 @@ bool CVoidEgine::Initialize()
 	FlushCommandQueue();
 
 	return true;
+}
+
+void CVoidEgine::PushModels(std::vector<RenderItem*>& render_items)
+{
+	auto opaque_items = mRitemLayer[(int)RenderLayer::Opaque];
+	opaque_items.insert(opaque_items.end(), render_items.begin(), render_items.end());
 }
 
 void CVoidEgine::CreateRtvAndDsvDescriptorHeaps()
@@ -130,7 +138,6 @@ void CVoidEgine::Update(const GameTimer& gt)
 	}
 
 	UpdateObjectCBs(gt);
-	UpdateSkinnedCBs(gt);
 	UpdateMaterialBuffer(gt);
 	UpdateShadowTransform(gt);
 	UpdateMainPassCB(gt);
@@ -291,22 +298,6 @@ void CVoidEgine::UpdateObjectCBs(const GameTimer& gt)
 			e->NumFramesDirty--;
 		}
 	}
-}
-
-void CVoidEgine::UpdateSkinnedCBs(const GameTimer& gt)
-{
-	auto currSkinnedCB = mCurrFrameResource->SkinnedCB.get();
-
-	// We only have one skinned model being animated.
-	mSkinnedModelInst->UpdateSkinnedAnimation(gt.DeltaTime());
-
-	SkinnedConstants skinnedConstants;
-	std::copy(
-		std::begin(mSkinnedModelInst->FinalTransforms),
-		std::end(mSkinnedModelInst->FinalTransforms),
-		&skinnedConstants.BoneTransforms[0]);
-
-	currSkinnedCB->CopyData(0, skinnedConstants);
 }
 
 void CVoidEgine::UpdateMaterialBuffer(const GameTimer& gt)
@@ -637,16 +628,6 @@ void CVoidEgine::BuildDescriptorHeaps()
 		mTextures["defaultDiffuseMap"]->Resource,
 		mTextures["defaultNormalMap"]->Resource
 	};
-
-	mSkinnedSrvHeapStart = (UINT)tex2DList.size();
-
-	for (UINT i = 0; i < (UINT)mSkinnedTextureNames.size(); ++i)
-	{
-		auto texResource = mTextures[mSkinnedTextureNames[i]]->Resource;
-		assert(texResource != nullptr);
-		tex2DList.push_back(texResource);
-	}
-
 
 	auto skyCubeMap = mTextures["skyCubeMap"]->Resource;
 
@@ -1008,16 +989,6 @@ void CVoidEgine::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::
 		D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress() + ri->ObjCBIndex * objCBByteSize;
 
 		cmdList->SetGraphicsRootConstantBufferView(0, objCBAddress);
-
-		if (ri->SkinnedModelInst != nullptr)
-		{
-			D3D12_GPU_VIRTUAL_ADDRESS skinnedCBAddress = skinnedCB->GetGPUVirtualAddress() + ri->SkinnedCBIndex * skinnedCBByteSize;
-			cmdList->SetGraphicsRootConstantBufferView(1, skinnedCBAddress);
-		}
-		else
-		{
-			cmdList->SetGraphicsRootConstantBufferView(1, 0);
-		}
 
 		cmdList->DrawIndexedInstanced(ri->IndexCount, 1, ri->StartIndexLocation, ri->BaseVertexLocation, 0);
 	}

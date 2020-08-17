@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include "../../Common/d3dUtil.h"
+#include "../Common/d3dUtil.h"
 #include "../FrameResource/FrameResource.h"
  
  

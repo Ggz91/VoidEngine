@@ -1,93 +1,19 @@
 #pragma once
-#include "../../Common/CBaseEngine.h"
+#include "../EngineImp/CBaseEngine.h"
 #include "../Skin/SkinnedData.h"
 #include "../FrameResource/FrameResource.h"
-#include "../../Common/Camera.h"
+#include "../Common/Camera.h"
 
-struct ShadowMap;
+class ShadowMap;
 class Ssao;
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
 using namespace DirectX::PackedVector;
 
-const int gNumFrameResources = 3;
 
 
 
-struct SkinnedModelInstance
-{
-	SkinnedData* SkinnedInfo = nullptr;
-	std::vector<DirectX::XMFLOAT4X4> FinalTransforms;
-	std::string ClipName;
-	float TimePos = 0.0f;
-
-	// Called every frame and increments the time position, interpolates the 
-	// animations for each bone based on the current animation clip, and 
-	// generates the final transforms which are ultimately set to the effect
-	// for processing in the vertex shader.
-	void UpdateSkinnedAnimation(float dt)
-	{
-		TimePos += dt;
-
-		// Loop animation
-		if (TimePos > SkinnedInfo->GetClipEndTime(ClipName))
-			TimePos = 0.0f;
-
-		// Compute the final transforms for this time position.
-		SkinnedInfo->GetFinalTransforms(ClipName, TimePos, FinalTransforms);
-	}
-};
-
-// Lightweight structure stores parameters to draw a shape.  This will
-// vary from app-to-app.
-struct RenderItem
-{
-	RenderItem() = default;
-	RenderItem(const RenderItem& rhs) = delete;
-
-	// World matrix of the shape that describes the object's local space
-	// relative to the world space, which defines the position, orientation,
-	// and scale of the object in the world.
-	XMFLOAT4X4 World = MathHelper::Identity4x4();
-
-	XMFLOAT4X4 TexTransform = MathHelper::Identity4x4();
-
-	// Dirty flag indicating the object data has changed and we need to update the constant buffer.
-	// Because we have an object cbuffer for each FrameResource, we have to apply the
-	// update to each FrameResource.  Thus, when we modify obect data we should set 
-	// NumFramesDirty = gNumFrameResources so that each frame resource gets the update.
-	int NumFramesDirty = gNumFrameResources;
-
-	// Index into GPU constant buffer corresponding to the ObjectCB for this render item.
-	UINT ObjCBIndex = -1;
-
-	Material* Mat = nullptr;
-	MeshGeometry* Geo = nullptr;
-
-	// Primitive topology.
-	D3D12_PRIMITIVE_TOPOLOGY PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-
-	// DrawIndexedInstanced parameters.
-	UINT IndexCount = 0;
-	UINT StartIndexLocation = 0;
-	int BaseVertexLocation = 0;
-
-	// Only applicable to skinned render-items.
-	UINT SkinnedCBIndex = -1;
-
-	// nullptr if this render-item is not animated by skinned mesh.
-	SkinnedModelInstance* SkinnedModelInst = nullptr;
-};
-
-enum class RenderLayer : int
-{
-	Opaque = 0,
-	SkinnedOpaque,
-	Debug,
-	Sky,
-	Count
-};
 
 class CVoidEgine : public CBaseEngine
 {
@@ -98,7 +24,7 @@ public:
 	~CVoidEgine();
 
 	virtual bool Initialize()override;
-
+	virtual void PushModels(std::vector<RenderItem*>& render_items) override;
 private:
 	virtual void CreateRtvAndDsvDescriptorHeaps()override;
 	virtual void OnResize()override;
@@ -106,7 +32,6 @@ private:
 	virtual void Draw(const GameTimer& gt)override;
 
 	void UpdateObjectCBs(const GameTimer& gt);
-	void UpdateSkinnedCBs(const GameTimer& gt);
 	void UpdateMaterialBuffer(const GameTimer& gt);
 	void UpdateShadowTransform(const GameTimer& gt);
 	void UpdateMainPassCB(const GameTimer& gt);
@@ -170,11 +95,6 @@ private:
 	PassConstants mMainPassCB;  // index 0 of pass cbuffer.
 	PassConstants mShadowPassCB;// index 1 of pass cbuffer.
 
-	UINT mSkinnedSrvHeapStart = 0;
-	std::string mSkinnedModelFilename = "Models\\soldier.m3d";
-	std::unique_ptr<SkinnedModelInstance> mSkinnedModelInst;
-	SkinnedData mSkinnedInfo;
-	std::vector<std::string> mSkinnedTextureNames;
 
 	Camera mCamera;
 

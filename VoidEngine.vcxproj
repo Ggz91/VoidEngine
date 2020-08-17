@@ -99,7 +99,8 @@
       <EnableUAC>false</EnableUAC>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y /d ".\VoidEngine.h" "$(OutDir)..\Interface\"</Command>
+      <Command>xcopy /y /d ".\VoidEngineInterface.h" "$(OutDir)..\Interface\"
+xcopy /y /d ".\Modules\Common" "$(OutDir)..\Modules\Common"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -159,33 +160,38 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="Common\Camera.h" />
+    <ClInclude Include="CommonDefines.h" />
     <ClInclude Include="Common\CBaseEngine.h" />
-    <ClInclude Include="Common\d3dUtil.h" />
-    <ClInclude Include="Common\d3dx12.h" />
-    <ClInclude Include="Common\DDSTextureLoader.h" />
-    <ClInclude Include="Common\GameTimer.h" />
-    <ClInclude Include="Common\GeometryGenerator.h" />
-    <ClInclude Include="Common\MathHelper.h" />
-    <ClInclude Include="Common\UploadBuffer.h" />
     <ClInclude Include="framework.h" />
+    <ClInclude Include="Modules\Common\Camera.h" />
+    <ClInclude Include="Modules\Common\d3dUtil.h" />
+    <ClInclude Include="Modules\Common\d3dx12.h" />
+    <ClInclude Include="Modules\Common\DDSTextureLoader.h" />
+    <ClInclude Include="Modules\Common\GameTimer.h" />
+    <ClInclude Include="Modules\Common\GeometryGenerator.h" />
+    <ClInclude Include="Modules\Common\MathHelper.h" />
+    <ClInclude Include="Modules\Common\RenderItems.h" />
+    <ClInclude Include="Modules\Common\UploadBuffer.h" />
+    <ClInclude Include="Modules\EngineImp\CBaseEngine.h" />
     <ClInclude Include="Modules\EngineImp\VoidEngineImp.h" />
+    <ClInclude Include="Modules\EngineWrapperImp\EngineWrapperImp.h" />
     <ClInclude Include="Modules\FrameResource\FrameResource.h" />
     <ClInclude Include="Modules\ShadowMap\ShadowMap.h" />
     <ClInclude Include="Modules\Skin\SkinnedData.h" />
     <ClInclude Include="Modules\SSAO\Ssao.h" />
-    <ClInclude Include="VoidEngine.h" />
+    <ClInclude Include="VoidEngineInterface.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Common\Camera.cpp" />
-    <ClCompile Include="Common\CBaseEngine.cpp" />
-    <ClCompile Include="Common\d3dUtil.cpp" />
-    <ClCompile Include="Common\DDSTextureLoader.cpp" />
-    <ClCompile Include="Common\GameTimer.cpp" />
-    <ClCompile Include="Common\GeometryGenerator.cpp" />
-    <ClCompile Include="Common\MathHelper.cpp" />
     <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="Modules\Common\Camera.cpp" />
+    <ClCompile Include="Modules\Common\d3dUtil.cpp" />
+    <ClCompile Include="Modules\Common\DDSTextureLoader.cpp" />
+    <ClCompile Include="Modules\Common\GameTimer.cpp" />
+    <ClCompile Include="Modules\Common\GeometryGenerator.cpp" />
+    <ClCompile Include="Modules\Common\MathHelper.cpp" />
+    <ClCompile Include="Modules\EngineImp\CBaseEngine.cpp" />
     <ClCompile Include="Modules\EngineImp\VoidEngineImp.cpp" />
+    <ClCompile Include="Modules\EngineWrapperImp\EngineWrapperImp.cpp" />
     <ClCompile Include="Modules\FrameResource\FrameResource.cpp" />
     <ClCompile Include="Modules\ShadowMap\ShadowMap.cpp" />
     <ClCompile Include="Modules\Skin\SkinnedData.cpp" />
@@ -196,7 +202,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="VoidEngine.cpp" />
+    <ClCompile Include="VoidEngineInterface.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
