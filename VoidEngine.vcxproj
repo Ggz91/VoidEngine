@@ -90,7 +90,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;VOIDENGINE_EXPORTS;_WINDOWS;_USRDLL;__Engine_Export;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
     </ClCompile>
     <Link>
@@ -159,12 +159,37 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Common\Camera.h" />
+    <ClInclude Include="Common\CBaseEngine.h" />
+    <ClInclude Include="Common\d3dUtil.h" />
+    <ClInclude Include="Common\d3dx12.h" />
+    <ClInclude Include="Common\DDSTextureLoader.h" />
+    <ClInclude Include="Common\GameTimer.h" />
+    <ClInclude Include="Common\GeometryGenerator.h" />
+    <ClInclude Include="Common\MathHelper.h" />
+    <ClInclude Include="Common\UploadBuffer.h" />
     <ClInclude Include="framework.h" />
-    <ClInclude Include="pch.h" />
+    <ClInclude Include="Modules\EngineImp\VoidEngineImp.h" />
+    <ClInclude Include="Modules\FrameResource\FrameResource.h" />
+    <ClInclude Include="Modules\ShadowMap\ShadowMap.h" />
+    <ClInclude Include="Modules\Skin\SkinnedData.h" />
+    <ClInclude Include="Modules\SSAO\Ssao.h" />
     <ClInclude Include="VoidEngine.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Common\Camera.cpp" />
+    <ClCompile Include="Common\CBaseEngine.cpp" />
+    <ClCompile Include="Common\d3dUtil.cpp" />
+    <ClCompile Include="Common\DDSTextureLoader.cpp" />
+    <ClCompile Include="Common\GameTimer.cpp" />
+    <ClCompile Include="Common\GeometryGenerator.cpp" />
+    <ClCompile Include="Common\MathHelper.cpp" />
     <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="Modules\EngineImp\VoidEngineImp.cpp" />
+    <ClCompile Include="Modules\FrameResource\FrameResource.cpp" />
+    <ClCompile Include="Modules\ShadowMap\ShadowMap.cpp" />
+    <ClCompile Include="Modules\Skin\SkinnedData.cpp" />
+    <ClCompile Include="Modules\SSAO\Ssao.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>

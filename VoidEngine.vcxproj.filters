@@ -13,16 +13,73 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="EngineImp">
+      <UniqueIdentifier>{3d1acb7b-2cca-4f7a-817c-56c77176bf11}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="EgineWrapper">
+      <UniqueIdentifier>{561d447d-d671-4d94-8b9a-3c3d5b3795a4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ShadowMap">
+      <UniqueIdentifier>{1af95e25-6156-4111-91a6-9d30a0612956}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="SSAO">
+      <UniqueIdentifier>{5128cee6-aff9-416b-808a-200c40ddf002}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FrameResource">
+      <UniqueIdentifier>{f115a793-65b8-41aa-81df-5a42a0ef4fce}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Skin">
+      <UniqueIdentifier>{4371d026-26fc-4e52-966c-28d4e1f3c84c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="framework.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="pch.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="VoidEngine.h">
       <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\Camera.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\d3dUtil.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\d3dx12.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\DDSTextureLoader.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\GameTimer.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\GeometryGenerator.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\MathHelper.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\UploadBuffer.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\CBaseEngine.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\EngineImp\VoidEngineImp.h">
+      <Filter>EngineImp</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\ShadowMap\ShadowMap.h">
+      <Filter>ShadowMap</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\Skin\SkinnedData.h">
+      <Filter>Skin</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\SSAO\Ssao.h">
+      <Filter>SSAO</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\FrameResource\FrameResource.h">
+      <Filter>FrameResource</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -34,6 +91,42 @@
     </ClCompile>
     <ClCompile Include="VoidEngine.cpp">
       <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\Camera.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\d3dUtil.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\DDSTextureLoader.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\GameTimer.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\GeometryGenerator.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\MathHelper.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\CBaseEngine.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Modules\EngineImp\VoidEngineImp.cpp">
+      <Filter>EngineImp</Filter>
+    </ClCompile>
+    <ClCompile Include="Modules\FrameResource\FrameResource.cpp">
+      <Filter>FrameResource</Filter>
+    </ClCompile>
+    <ClCompile Include="Modules\ShadowMap\ShadowMap.cpp">
+      <Filter>ShadowMap</Filter>
+    </ClCompile>
+    <ClCompile Include="Modules\Skin\SkinnedData.cpp">
+      <Filter>Skin</Filter>
+    </ClCompile>
+    <ClCompile Include="Modules\SSAO\Ssao.cpp">
+      <Filter>SSAO</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>
