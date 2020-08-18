@@ -36,6 +36,7 @@ bool CVoidEgine::Initialize()
 	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
 
 	mCamera.SetPosition(0.0f, 2.0f, -15.0f);
+	mCamera.UpdateViewMatrix();
 
 	mShadowMap = std::make_unique<ShadowMap>(md3dDevice.Get(),
 		2048, 2048);
@@ -165,11 +166,15 @@ void CVoidEgine::Draw(const GameTimer& gt)
 	//
 	// Shadow map pass.
 	//
-
+/*
 	// Bind all the materials used in this scene.  For structured buffers, we can bypass the heap and 
 	// set as a root descriptor.
-	auto matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
-	mCommandList->SetGraphicsRootShaderResourceView(3, matBuffer->GetGPUVirtualAddress());
+	if (NULL != mCurrFrameResource->MaterialBuffer)
+	{
+		auto matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
+		mCommandList->SetGraphicsRootShaderResourceView(3, matBuffer->GetGPUVirtualAddress());
+	}
+	
 
 	// Bind null SRV for shadow map pass.
 	mCommandList->SetGraphicsRootDescriptorTable(4, mNullSrv);
@@ -193,7 +198,7 @@ void CVoidEgine::Draw(const GameTimer& gt)
 
 	mCommandList->SetGraphicsRootSignature(mSsaoRootSignature.Get());
 	mSsao->ComputeSsao(mCommandList.Get(), mCurrFrameResource, 2);
-
+*/
 	//
 	// Main rendering pass.
 	//
@@ -204,8 +209,12 @@ void CVoidEgine::Draw(const GameTimer& gt)
 
 	// Bind all the materials used in this scene.  For structured buffers, we can bypass the heap and 
 	// set as a root descriptor.
-	matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
-	mCommandList->SetGraphicsRootShaderResourceView(3, matBuffer->GetGPUVirtualAddress());
+	if (NULL != mCurrFrameResource->MaterialBuffer)
+	{
+		auto matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
+		mCommandList->SetGraphicsRootShaderResourceView(3, matBuffer->GetGPUVirtualAddress());
+	}
+		
 
 
 	mCommandList->RSSetViewports(1, &mScreenViewport);
@@ -221,7 +230,7 @@ void CVoidEgine::Draw(const GameTimer& gt)
 
 	// Specify the buffers we are going to render to.
 	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
-
+/*
 	// Bind all the textures used in this scene.  Observe
 	// that we only have to specify the first descriptor in the table.  
 	// The root signature knows how many descriptors are expected in the table.
@@ -250,7 +259,7 @@ void CVoidEgine::Draw(const GameTimer& gt)
 
 	mCommandList->SetPipelineState(mPSOs["sky"].Get());
 	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Sky]);
-
+*/
 	// Indicate a state transition on the resource usage.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
 		D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
@@ -621,16 +630,9 @@ void CVoidEgine::BuildDescriptorHeaps()
 
 	std::vector<ComPtr<ID3D12Resource>> tex2DList =
 	{
-		mTextures["bricksDiffuseMap"]->Resource,
-		mTextures["bricksNormalMap"]->Resource,
-		mTextures["tileDiffuseMap"]->Resource,
-		mTextures["tileNormalMap"]->Resource,
-		mTextures["defaultDiffuseMap"]->Resource,
-		mTextures["defaultNormalMap"]->Resource
 	};
 
-	auto skyCubeMap = mTextures["skyCubeMap"]->Resource;
-
+	//auto skyCubeMap = mTextures["skyCubeMap"]->Resource;
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
@@ -647,12 +649,12 @@ void CVoidEgine::BuildDescriptorHeaps()
 		hDescriptor.Offset(1, mCbvSrvUavDescriptorSize);
 	}
 
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
-	srvDesc.TextureCube.MostDetailedMip = 0;
-	srvDesc.TextureCube.MipLevels = skyCubeMap->GetDesc().MipLevels;
-	srvDesc.TextureCube.ResourceMinLODClamp = 0.0f;
-	srvDesc.Format = skyCubeMap->GetDesc().Format;
-	md3dDevice->CreateShaderResourceView(skyCubeMap.Get(), &srvDesc, hDescriptor);
+// 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+// 	srvDesc.TextureCube.MostDetailedMip = 0;
+// 	srvDesc.TextureCube.MipLevels = skyCubeMap->GetDesc().MipLevels;
+// 	srvDesc.TextureCube.ResourceMinLODClamp = 0.0f;
+	srvDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+// 	md3dDevice->CreateShaderResourceView(skyCubeMap.Get(), &srvDesc, hDescriptor);
 
 	mSkyTexHeapIndex = (UINT)tex2DList.size();
 	mShadowMapHeapIndex = mSkyTexHeapIndex + 1;
@@ -706,30 +708,30 @@ void CVoidEgine::BuildShadersAndInputLayout()
 		NULL, NULL
 	};
 
-	mShaders["standardVS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["skinnedVS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", skinnedDefines, "VS", "vs_5_1");
-	mShaders["opaquePS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS", "ps_5_1");
+	mShaders["standardVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Default.hlsl", nullptr, "VS", "vs_5_1");
+	mShaders["skinnedVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Default.hlsl", skinnedDefines, "VS", "vs_5_1");
+	mShaders["opaquePS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Default.hlsl", nullptr, "PS", "ps_5_1");
 
-	mShaders["shadowVS"] = d3dUtil::CompileShader(L"Shaders\\Shadows.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["skinnedShadowVS"] = d3dUtil::CompileShader(L"Shaders\\Shadows.hlsl", skinnedDefines, "VS", "vs_5_1");
-	mShaders["shadowOpaquePS"] = d3dUtil::CompileShader(L"Shaders\\Shadows.hlsl", nullptr, "PS", "ps_5_1");
-	mShaders["shadowAlphaTestedPS"] = d3dUtil::CompileShader(L"Shaders\\Shadows.hlsl", alphaTestDefines, "PS", "ps_5_1");
+	mShaders["shadowVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Shadows.hlsl", nullptr, "VS", "vs_5_1");
+	mShaders["skinnedShadowVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Shadows.hlsl", skinnedDefines, "VS", "vs_5_1");
+	mShaders["shadowOpaquePS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Shadows.hlsl", nullptr, "PS", "ps_5_1");
+	mShaders["shadowAlphaTestedPS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Shadows.hlsl", alphaTestDefines, "PS", "ps_5_1");
 
-	mShaders["debugVS"] = d3dUtil::CompileShader(L"Shaders\\ShadowDebug.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["debugPS"] = d3dUtil::CompileShader(L"Shaders\\ShadowDebug.hlsl", nullptr, "PS", "ps_5_1");
+	mShaders["debugVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\ShadowDebug.hlsl", nullptr, "VS", "vs_5_1");
+	mShaders["debugPS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\ShadowDebug.hlsl", nullptr, "PS", "ps_5_1");
 
-	mShaders["drawNormalsVS"] = d3dUtil::CompileShader(L"Shaders\\DrawNormals.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["skinnedDrawNormalsVS"] = d3dUtil::CompileShader(L"Shaders\\DrawNormals.hlsl", skinnedDefines, "VS", "vs_5_1");
-	mShaders["drawNormalsPS"] = d3dUtil::CompileShader(L"Shaders\\DrawNormals.hlsl", nullptr, "PS", "ps_5_1");
+	mShaders["drawNormalsVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\DrawNormals.hlsl", nullptr, "VS", "vs_5_1");
+	mShaders["skinnedDrawNormalsVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\DrawNormals.hlsl", skinnedDefines, "VS", "vs_5_1");
+	mShaders["drawNormalsPS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\DrawNormals.hlsl", nullptr, "PS", "ps_5_1");
 
-	mShaders["ssaoVS"] = d3dUtil::CompileShader(L"Shaders\\Ssao.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["ssaoPS"] = d3dUtil::CompileShader(L"Shaders\\Ssao.hlsl", nullptr, "PS", "ps_5_1");
+	mShaders["ssaoVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Ssao.hlsl", nullptr, "VS", "vs_5_1");
+	mShaders["ssaoPS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Ssao.hlsl", nullptr, "PS", "ps_5_1");
 
-	mShaders["ssaoBlurVS"] = d3dUtil::CompileShader(L"Shaders\\SsaoBlur.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["ssaoBlurPS"] = d3dUtil::CompileShader(L"Shaders\\SsaoBlur.hlsl", nullptr, "PS", "ps_5_1");
+	mShaders["ssaoBlurVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\SsaoBlur.hlsl", nullptr, "VS", "vs_5_1");
+	mShaders["ssaoBlurPS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\SsaoBlur.hlsl", nullptr, "PS", "ps_5_1");
 
-	mShaders["skyVS"] = d3dUtil::CompileShader(L"Shaders\\Sky.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["skyPS"] = d3dUtil::CompileShader(L"Shaders\\Sky.hlsl", nullptr, "PS", "ps_5_1");
+	mShaders["skyVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Sky.hlsl", nullptr, "VS", "vs_5_1");
+	mShaders["skyPS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Sky.hlsl", nullptr, "PS", "ps_5_1");
 
 	mInputLayout =
 	{
@@ -971,11 +973,14 @@ void CVoidEgine::BuildFrameResources()
 
 void CVoidEgine::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems)
 {
+	if (NULL == mCurrFrameResource->ObjectCB)
+	{
+		return;
+	}
 	UINT objCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
 	UINT skinnedCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(SkinnedConstants));
 
 	auto objectCB = mCurrFrameResource->ObjectCB->Resource();
-	auto skinnedCB = mCurrFrameResource->SkinnedCB->Resource();
 
 	// For each render item...
 	for (size_t i = 0; i < ritems.size(); ++i)

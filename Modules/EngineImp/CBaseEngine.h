@@ -26,6 +26,8 @@ public:
 	virtual void Update(const GameTimer& gt) = 0;
 	virtual void Draw(const GameTimer& gt) = 0;
     virtual void PushModels(std::vector<RenderItem*>& render_items) = 0;
+	virtual bool InitDirect3D() = 0;
+	virtual void Debug() = 0;
 };
 
 class CBaseEngine : public IEngine
@@ -40,15 +42,15 @@ protected:
 public:
 
     static CBaseEngine* GetApp();
-    
+    virtual void Debug() override;
 	HINSTANCE AppInst()const;
 	HWND      MainWnd()const;
 	float     AspectRatio()const;
 
     bool Get4xMsaaState()const;
     void Set4xMsaaState(bool value);
-
-    virtual bool Initialize();
+	virtual bool InitDirect3D();
+	virtual bool Initialize();
     virtual void PushModels(std::vector<RenderItem*>& render_items) = 0;
 protected:
     virtual void CreateRtvAndDsvDescriptorHeaps();
@@ -60,7 +62,6 @@ protected:
 
 protected:
 
-	bool InitDirect3D();
 	void CreateCommandObjects();
     void CreateSwapChain();
 

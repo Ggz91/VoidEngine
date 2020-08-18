@@ -15,6 +15,11 @@ CBaseEngine* CBaseEngine::GetApp()
     return m_engine;
 }
 
+void CBaseEngine::Debug()
+{
+    auto hr = md3dDevice->GetDeviceRemovedReason();
+}
+
 CBaseEngine::CBaseEngine(HINSTANCE hInstance, HWND wnd)
 :	mhAppInst(hInstance), mhMainWnd(wnd)
 {
@@ -63,12 +68,6 @@ void CBaseEngine::Set4xMsaaState(bool value)
 
 bool CBaseEngine::Initialize()
 {
-	if(!InitDirect3D())
-		return false;
-
-    // Do the initial resize code.
-    OnResize();
-
 	return true;
 }
  

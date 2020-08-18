@@ -3,6 +3,7 @@
 
 CEngineWrapper::CEngineWrapper(HINSTANCE h_instance, HWND h_wnd) : m_ptr_engine(std::make_unique<CVoidEgine>(h_instance, h_wnd))
 {
+
 }
 
 CEngineWrapper::~CEngineWrapper()
@@ -10,9 +11,14 @@ CEngineWrapper::~CEngineWrapper()
 	m_ptr_engine.release();
 }
 
-void CEngineWrapper::Init()
+bool CEngineWrapper::Init3D()
 {
-	m_ptr_engine->Initialize();
+	return m_ptr_engine->InitDirect3D();
+}
+
+bool CEngineWrapper::Init()
+{
+	return m_ptr_engine->Initialize();
 }
 
 void CEngineWrapper::Update(const GameTimer& gt)
@@ -28,5 +34,15 @@ void CEngineWrapper::Draw(const GameTimer& gt)
 void CEngineWrapper::PushModels(std::vector<RenderItem*>& render_items)
 {
 	m_ptr_engine->PushModels(render_items);
+}
+
+void CEngineWrapper::OnResize()
+{
+	m_ptr_engine->OnResize();
+}
+
+void CEngineWrapper::Debug()
+{
+	m_ptr_engine->Debug();
 }
 

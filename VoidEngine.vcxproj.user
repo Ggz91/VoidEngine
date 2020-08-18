@@ -3,4 +3,9 @@
   <PropertyGroup>
     <ShowAllFiles>false</ShowAllFiles>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LocalDebuggerCommand>F:\learning\dx_project_demo\GPUDrivenRenderPipeline\Debug\GPUDrivenRenderPipeline.exe</LocalDebuggerCommand>
+    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+    <LocalDebuggerWorkingDirectory>..\GPUDrivenRenderPipeline\</LocalDebuggerWorkingDirectory>
+  </PropertyGroup>
 </Project>
