@@ -34,6 +34,9 @@
     <Filter Include="Common">
       <UniqueIdentifier>{55da787f-16f1-4548-a91a-19f6124a409c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RenderItemFillUtil">
+      <UniqueIdentifier>{f114da72-4c8b-4cbe-891b-a94f3b68346b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="framework.h">
@@ -99,6 +102,9 @@
     <ClInclude Include="Modules\Common\GeometryDefines.h">
       <Filter>Common</Filter>
     </ClInclude>
+    <ClInclude Include="Modules\RenderItemUtil\RenderItemUtil.h">
+      <Filter>RenderItemFillUtil</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -148,6 +154,9 @@
     </ClCompile>
     <ClCompile Include="Modules\Common\MathHelper.cpp">
       <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Modules\RenderItemUtil\RenderItemUtil.cpp">
+      <Filter>RenderItemFillUtil</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

@@ -7,6 +7,7 @@
 #include "../Common/GeometryGenerator.h"
 #include "../SSAO/Ssao.h"
 #include "../ShadowMap/ShadowMap.h"
+#include "../RenderItemUtil/RenderItemUtil.h"
 
 const int gNumFrameResources = 3;
 
@@ -47,7 +48,6 @@ bool CVoidEgine::Initialize()
 		mClientWidth, mClientHeight);
 
 	BuildRootSignature();
-	BuildSsaoRootSignature();
 	BuildDescriptorHeaps();
 	BuildShadersAndInputLayout();
 	BuildFrameResources();
@@ -68,8 +68,11 @@ bool CVoidEgine::Initialize()
 
 void CVoidEgine::PushModels(std::vector<RenderItem*>& render_items)
 {
-	auto opaque_items = mRitemLayer[(int)RenderLayer::Opaque];
+	RenderItemUtil::FillGeoData(render_items, md3dDevice.Get(), mCommandList.Get());
+	auto& opaque_items = mRitemLayer[(int)RenderLayer::Opaque];
 	opaque_items.insert(opaque_items.end(), render_items.begin(), render_items.end());
+
+	mAllRitems.insert(mAllRitems.end(), render_items.begin(), render_items.end());
 }
 
 void CVoidEgine::CreateRtvAndDsvDescriptorHeaps()
@@ -118,7 +121,7 @@ void CVoidEgine::Update(const GameTimer& gt)
 	// If not, wait until the GPU has completed commands up to this fence point.
 	if (mCurrFrameResource->Fence != 0 && mFence->GetCompletedValue() < mCurrFrameResource->Fence)
 	{
-		HANDLE eventHandle = CreateEventEx(nullptr, nullptr, CREATE_EVENT_INITIAL_SET, EVENT_ALL_ACCESS);
+		HANDLE eventHandle = CreateEventEx(nullptr, nullptr, CREATE_EVENT_MANUAL_RESET, EVENT_ALL_ACCESS);
 		ThrowIfFailed(mFence->SetEventOnCompletion(mCurrFrameResource->Fence, eventHandle));
 		WaitForSingleObject(eventHandle, INFINITE);
 		CloseHandle(eventHandle);
@@ -140,10 +143,7 @@ void CVoidEgine::Update(const GameTimer& gt)
 
 	UpdateObjectCBs(gt);
 	UpdateMaterialBuffer(gt);
-	UpdateShadowTransform(gt);
 	UpdateMainPassCB(gt);
-	UpdateShadowPassCB(gt);
-	UpdateSsaoCB(gt);
 }
 
 void CVoidEgine::Draw(const GameTimer& gt)
@@ -160,49 +160,6 @@ void CVoidEgine::Draw(const GameTimer& gt)
 
 	ID3D12DescriptorHeap* descriptorHeaps[] = { mSrvDescriptorHeap.Get() };
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
-
-	mCommandList->SetGraphicsRootSignature(mRootSignature.Get());
-
-	//
-	// Shadow map pass.
-	//
-/*
-	// Bind all the materials used in this scene.  For structured buffers, we can bypass the heap and 
-	// set as a root descriptor.
-	if (NULL != mCurrFrameResource->MaterialBuffer)
-	{
-		auto matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
-		mCommandList->SetGraphicsRootShaderResourceView(3, matBuffer->GetGPUVirtualAddress());
-	}
-	
-
-	// Bind null SRV for shadow map pass.
-	mCommandList->SetGraphicsRootDescriptorTable(4, mNullSrv);
-
-	// Bind all the textures used in this scene.  Observe
-	// that we only have to specify the first descriptor in the table.  
-	// The root signature knows how many descriptors are expected in the table.
-	mCommandList->SetGraphicsRootDescriptorTable(5, mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-
-	DrawSceneToShadowMap();
-
-	//
-	// Normal/depth pass.
-	//
-
-	DrawNormalsAndDepth();
-
-	//
-	//
-	// 
-
-	mCommandList->SetGraphicsRootSignature(mSsaoRootSignature.Get());
-	mSsao->ComputeSsao(mCommandList.Get(), mCurrFrameResource, 2);
-*/
-	//
-	// Main rendering pass.
-	//
-
 	mCommandList->SetGraphicsRootSignature(mRootSignature.Get());
 
 	// Rebind state whenever graphics root signature changes.
@@ -214,8 +171,6 @@ void CVoidEgine::Draw(const GameTimer& gt)
 		auto matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
 		mCommandList->SetGraphicsRootShaderResourceView(3, matBuffer->GetGPUVirtualAddress());
 	}
-		
-
 
 	mCommandList->RSSetViewports(1, &mScreenViewport);
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
@@ -230,36 +185,18 @@ void CVoidEgine::Draw(const GameTimer& gt)
 
 	// Specify the buffers we are going to render to.
 	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
-/*
-	// Bind all the textures used in this scene.  Observe
-	// that we only have to specify the first descriptor in the table.  
-	// The root signature knows how many descriptors are expected in the table.
-	mCommandList->SetGraphicsRootDescriptorTable(5, mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
 	auto passCB = mCurrFrameResource->PassCB->Resource();
-	mCommandList->SetGraphicsRootConstantBufferView(2, passCB->GetGPUVirtualAddress());
+	mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress());
 
 	// Bind the sky cube map.  For our demos, we just use one "world" cube map representing the environment
 	// from far away, so all objects will use the same cube map and we only need to set it once per-frame.  
 	// If we wanted to use "local" cube maps, we would have to change them per-object, or dynamically
 	// index into an array of cube maps.
 
-	CD3DX12_GPU_DESCRIPTOR_HANDLE skyTexDescriptor(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-	skyTexDescriptor.Offset(mSkyTexHeapIndex, mCbvSrvUavDescriptorSize);
-	mCommandList->SetGraphicsRootDescriptorTable(4, skyTexDescriptor);
-
 	mCommandList->SetPipelineState(mPSOs["opaque"].Get());
 	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
 
-	mCommandList->SetPipelineState(mPSOs["skinnedOpaque"].Get());
-	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::SkinnedOpaque]);
-
-	mCommandList->SetPipelineState(mPSOs["debug"].Get());
-	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Debug]);
-
-	mCommandList->SetPipelineState(mPSOs["sky"].Get());
-	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Sky]);
-*/
 	// Indicate a state transition on the resource usage.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
 		D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
@@ -299,7 +236,10 @@ void CVoidEgine::UpdateObjectCBs(const GameTimer& gt)
 			ObjectConstants objConstants;
 			XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
 			XMStoreFloat4x4(&objConstants.TexTransform, XMMatrixTranspose(texTransform));
-			objConstants.MaterialIndex = e->Mat->MatCBIndex;
+			if (NULL != e->Mat)
+			{
+				objConstants.MaterialIndex = e->Mat->MatCBIndex;
+			}
 
 			currObjectCB->CopyData(e->ObjCBIndex, objConstants);
 
@@ -491,27 +431,17 @@ void CVoidEgine::UpdateSsaoCB(const GameTimer& gt)
 
 void CVoidEgine::BuildRootSignature()
 {
-	CD3DX12_DESCRIPTOR_RANGE texTable0;
-	texTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 3, 0, 0);
-
-	CD3DX12_DESCRIPTOR_RANGE texTable1;
-	texTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 48, 3, 0);
-
 	// Root parameter can be a table, root descriptor or root constants.
-	CD3DX12_ROOT_PARAMETER slotRootParameter[6];
+	CD3DX12_ROOT_PARAMETER slotRootParameter[2];
 
 	// Perfomance TIP: Order from most frequent to least frequent.
 	slotRootParameter[0].InitAsConstantBufferView(0);
 	slotRootParameter[1].InitAsConstantBufferView(1);
-	slotRootParameter[2].InitAsConstantBufferView(2);
-	slotRootParameter[3].InitAsShaderResourceView(0, 1);
-	slotRootParameter[4].InitAsDescriptorTable(1, &texTable0, D3D12_SHADER_VISIBILITY_PIXEL);
-	slotRootParameter[5].InitAsDescriptorTable(1, &texTable1, D3D12_SHADER_VISIBILITY_PIXEL);
 
 	auto staticSamplers = GetStaticSamplers();
 
 	// A root signature is an array of root parameters.
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(6, slotRootParameter,
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(2, slotRootParameter,
 		(UINT)staticSamplers.size(), staticSamplers.data(),
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
@@ -532,84 +462,6 @@ void CVoidEgine::BuildRootSignature()
 		serializedRootSig->GetBufferPointer(),
 		serializedRootSig->GetBufferSize(),
 		IID_PPV_ARGS(mRootSignature.GetAddressOf())));
-}
-
-void CVoidEgine::BuildSsaoRootSignature()
-{
-	CD3DX12_DESCRIPTOR_RANGE texTable0;
-	texTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 0, 0);
-
-	CD3DX12_DESCRIPTOR_RANGE texTable1;
-	texTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2, 0);
-
-	// Root parameter can be a table, root descriptor or root constants.
-	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
-
-	// Perfomance TIP: Order from most frequent to least frequent.
-	slotRootParameter[0].InitAsConstantBufferView(0);
-	slotRootParameter[1].InitAsConstants(1, 1);
-	slotRootParameter[2].InitAsDescriptorTable(1, &texTable0, D3D12_SHADER_VISIBILITY_PIXEL);
-	slotRootParameter[3].InitAsDescriptorTable(1, &texTable1, D3D12_SHADER_VISIBILITY_PIXEL);
-
-	const CD3DX12_STATIC_SAMPLER_DESC pointClamp(
-		0, // shaderRegister
-		D3D12_FILTER_MIN_MAG_MIP_POINT, // filter
-		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
-		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
-		D3D12_TEXTURE_ADDRESS_MODE_CLAMP); // addressW
-
-	const CD3DX12_STATIC_SAMPLER_DESC linearClamp(
-		1, // shaderRegister
-		D3D12_FILTER_MIN_MAG_MIP_LINEAR, // filter
-		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
-		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
-		D3D12_TEXTURE_ADDRESS_MODE_CLAMP); // addressW
-
-	const CD3DX12_STATIC_SAMPLER_DESC depthMapSam(
-		2, // shaderRegister
-		D3D12_FILTER_MIN_MAG_MIP_LINEAR, // filter
-		D3D12_TEXTURE_ADDRESS_MODE_BORDER,  // addressU
-		D3D12_TEXTURE_ADDRESS_MODE_BORDER,  // addressV
-		D3D12_TEXTURE_ADDRESS_MODE_BORDER,  // addressW
-		0.0f,
-		0,
-		D3D12_COMPARISON_FUNC_LESS_EQUAL,
-		D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE);
-
-	const CD3DX12_STATIC_SAMPLER_DESC linearWrap(
-		3, // shaderRegister
-		D3D12_FILTER_MIN_MAG_MIP_LINEAR, // filter
-		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressU
-		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressV
-		D3D12_TEXTURE_ADDRESS_MODE_WRAP); // addressW
-
-	std::array<CD3DX12_STATIC_SAMPLER_DESC, 4> staticSamplers =
-	{
-		pointClamp, linearClamp, depthMapSam, linearWrap
-	};
-
-	// A root signature is an array of root parameters.
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter,
-		(UINT)staticSamplers.size(), staticSamplers.data(),
-		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
-
-	// create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
-	ComPtr<ID3DBlob> serializedRootSig = nullptr;
-	ComPtr<ID3DBlob> errorBlob = nullptr;
-	HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
-		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
-
-	if (errorBlob != nullptr)
-	{
-		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
-	}
-	ThrowIfFailed(hr);
-
-	ThrowIfFailed(md3dDevice->CreateRootSignature(
-		0,
-		serializedRootSig->GetBufferPointer(),
-		serializedRootSig->GetBufferSize(),
-		IID_PPV_ARGS(mSsaoRootSignature.GetAddressOf())));
 }
 
 void CVoidEgine::BuildDescriptorHeaps()
@@ -696,42 +548,9 @@ void CVoidEgine::BuildDescriptorHeaps()
 
 void CVoidEgine::BuildShadersAndInputLayout()
 {
-	const D3D_SHADER_MACRO alphaTestDefines[] =
-	{
-		"ALPHA_TEST", "1",
-		NULL, NULL
-	};
-
-	const D3D_SHADER_MACRO skinnedDefines[] =
-	{
-		"SKINNED", "1",
-		NULL, NULL
-	};
 
 	mShaders["standardVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Default.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["skinnedVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Default.hlsl", skinnedDefines, "VS", "vs_5_1");
 	mShaders["opaquePS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Default.hlsl", nullptr, "PS", "ps_5_1");
-
-	mShaders["shadowVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Shadows.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["skinnedShadowVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Shadows.hlsl", skinnedDefines, "VS", "vs_5_1");
-	mShaders["shadowOpaquePS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Shadows.hlsl", nullptr, "PS", "ps_5_1");
-	mShaders["shadowAlphaTestedPS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Shadows.hlsl", alphaTestDefines, "PS", "ps_5_1");
-
-	mShaders["debugVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\ShadowDebug.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["debugPS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\ShadowDebug.hlsl", nullptr, "PS", "ps_5_1");
-
-	mShaders["drawNormalsVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\DrawNormals.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["skinnedDrawNormalsVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\DrawNormals.hlsl", skinnedDefines, "VS", "vs_5_1");
-	mShaders["drawNormalsPS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\DrawNormals.hlsl", nullptr, "PS", "ps_5_1");
-
-	mShaders["ssaoVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Ssao.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["ssaoPS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Ssao.hlsl", nullptr, "PS", "ps_5_1");
-
-	mShaders["ssaoBlurVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\SsaoBlur.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["ssaoBlurPS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\SsaoBlur.hlsl", nullptr, "PS", "ps_5_1");
-
-	mShaders["skyVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Sky.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["skyPS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Sky.hlsl", nullptr, "PS", "ps_5_1");
 
 	mInputLayout =
 	{
@@ -784,179 +603,6 @@ void CVoidEgine::BuildPSOs()
 	opaquePsoDesc.SampleDesc.Quality = m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
 	opaquePsoDesc.DSVFormat = mDepthStencilFormat;
 	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&mPSOs["opaque"])));
-
-	//
-	// PSO for skinned pass.
-	//
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC skinnedOpaquePsoDesc = opaquePsoDesc;
-	skinnedOpaquePsoDesc.InputLayout = { mSkinnedInputLayout.data(), (UINT)mSkinnedInputLayout.size() };
-	skinnedOpaquePsoDesc.VS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["skinnedVS"]->GetBufferPointer()),
-		mShaders["skinnedVS"]->GetBufferSize()
-	};
-	skinnedOpaquePsoDesc.PS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["opaquePS"]->GetBufferPointer()),
-		mShaders["opaquePS"]->GetBufferSize()
-	};
-	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&skinnedOpaquePsoDesc, IID_PPV_ARGS(&mPSOs["skinnedOpaque"])));
-
-	//
-	// PSO for shadow map pass.
-	//
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC smapPsoDesc = opaquePsoDesc;
-	smapPsoDesc.RasterizerState.DepthBias = 100000;
-	smapPsoDesc.RasterizerState.DepthBiasClamp = 0.0f;
-	smapPsoDesc.RasterizerState.SlopeScaledDepthBias = 1.0f;
-	smapPsoDesc.pRootSignature = mRootSignature.Get();
-	smapPsoDesc.VS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["shadowVS"]->GetBufferPointer()),
-		mShaders["shadowVS"]->GetBufferSize()
-	};
-	smapPsoDesc.PS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["shadowOpaquePS"]->GetBufferPointer()),
-		mShaders["shadowOpaquePS"]->GetBufferSize()
-	};
-
-	// Shadow map pass does not have a render target.
-	smapPsoDesc.RTVFormats[0] = DXGI_FORMAT_UNKNOWN;
-	smapPsoDesc.NumRenderTargets = 0;
-	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&smapPsoDesc, IID_PPV_ARGS(&mPSOs["shadow_opaque"])));
-
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC skinnedSmapPsoDesc = smapPsoDesc;
-	skinnedSmapPsoDesc.InputLayout = { mSkinnedInputLayout.data(), (UINT)mSkinnedInputLayout.size() };
-	skinnedSmapPsoDesc.VS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["skinnedShadowVS"]->GetBufferPointer()),
-		mShaders["skinnedShadowVS"]->GetBufferSize()
-	};
-	skinnedSmapPsoDesc.PS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["shadowOpaquePS"]->GetBufferPointer()),
-		mShaders["shadowOpaquePS"]->GetBufferSize()
-	};
-	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&skinnedSmapPsoDesc, IID_PPV_ARGS(&mPSOs["skinnedShadow_opaque"])));
-
-	//
-	// PSO for debug layer.
-	//
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC debugPsoDesc = opaquePsoDesc;
-	debugPsoDesc.pRootSignature = mRootSignature.Get();
-	debugPsoDesc.VS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["debugVS"]->GetBufferPointer()),
-		mShaders["debugVS"]->GetBufferSize()
-	};
-	debugPsoDesc.PS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["debugPS"]->GetBufferPointer()),
-		mShaders["debugPS"]->GetBufferSize()
-	};
-	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&debugPsoDesc, IID_PPV_ARGS(&mPSOs["debug"])));
-
-	//
-	// PSO for drawing normals.
-	//
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC drawNormalsPsoDesc = opaquePsoDesc;
-	drawNormalsPsoDesc.VS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["drawNormalsVS"]->GetBufferPointer()),
-		mShaders["drawNormalsVS"]->GetBufferSize()
-	};
-	drawNormalsPsoDesc.PS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["drawNormalsPS"]->GetBufferPointer()),
-		mShaders["drawNormalsPS"]->GetBufferSize()
-	};
-	drawNormalsPsoDesc.RTVFormats[0] = Ssao::NormalMapFormat;
-	drawNormalsPsoDesc.SampleDesc.Count = 1;
-	drawNormalsPsoDesc.SampleDesc.Quality = 0;
-	drawNormalsPsoDesc.DSVFormat = mDepthStencilFormat;
-	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&drawNormalsPsoDesc, IID_PPV_ARGS(&mPSOs["drawNormals"])));
-
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC skinnedDrawNormalsPsoDesc = drawNormalsPsoDesc;
-	skinnedDrawNormalsPsoDesc.InputLayout = { mSkinnedInputLayout.data(), (UINT)mSkinnedInputLayout.size() };
-	skinnedDrawNormalsPsoDesc.VS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["skinnedDrawNormalsVS"]->GetBufferPointer()),
-		mShaders["skinnedDrawNormalsVS"]->GetBufferSize()
-	};
-	skinnedDrawNormalsPsoDesc.PS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["drawNormalsPS"]->GetBufferPointer()),
-		mShaders["drawNormalsPS"]->GetBufferSize()
-	};
-	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&skinnedDrawNormalsPsoDesc, IID_PPV_ARGS(&mPSOs["skinnedDrawNormals"])));
-
-	//
-	// PSO for SSAO.
-	//
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC ssaoPsoDesc = opaquePsoDesc;
-	ssaoPsoDesc.InputLayout = { nullptr, 0 };
-	ssaoPsoDesc.pRootSignature = mSsaoRootSignature.Get();
-	ssaoPsoDesc.VS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["ssaoVS"]->GetBufferPointer()),
-		mShaders["ssaoVS"]->GetBufferSize()
-	};
-	ssaoPsoDesc.PS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["ssaoPS"]->GetBufferPointer()),
-		mShaders["ssaoPS"]->GetBufferSize()
-	};
-
-	// SSAO effect does not need the depth buffer.
-	ssaoPsoDesc.DepthStencilState.DepthEnable = false;
-	ssaoPsoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
-	ssaoPsoDesc.RTVFormats[0] = Ssao::AmbientMapFormat;
-	ssaoPsoDesc.SampleDesc.Count = 1;
-	ssaoPsoDesc.SampleDesc.Quality = 0;
-	ssaoPsoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
-	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&ssaoPsoDesc, IID_PPV_ARGS(&mPSOs["ssao"])));
-
-	//
-	// PSO for SSAO blur.
-	//
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC ssaoBlurPsoDesc = ssaoPsoDesc;
-	ssaoBlurPsoDesc.VS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["ssaoBlurVS"]->GetBufferPointer()),
-		mShaders["ssaoBlurVS"]->GetBufferSize()
-	};
-	ssaoBlurPsoDesc.PS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["ssaoBlurPS"]->GetBufferPointer()),
-		mShaders["ssaoBlurPS"]->GetBufferSize()
-	};
-	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&ssaoBlurPsoDesc, IID_PPV_ARGS(&mPSOs["ssaoBlur"])));
-
-	//
-	// PSO for sky.
-	//
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC skyPsoDesc = opaquePsoDesc;
-
-	// The camera is inside the sky sphere, so just turn off culling.
-	skyPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-
-	// Make sure the depth function is LESS_EQUAL and not just LESS.  
-	// Otherwise, the normalized depth values at z = 1 (NDC) will 
-	// fail the depth test if the depth buffer was cleared to 1.
-	skyPsoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
-	skyPsoDesc.pRootSignature = mRootSignature.Get();
-	skyPsoDesc.VS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["skyVS"]->GetBufferPointer()),
-		mShaders["skyVS"]->GetBufferSize()
-	};
-	skyPsoDesc.PS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["skyPS"]->GetBufferPointer()),
-		mShaders["skyPS"]->GetBufferSize()
-	};
-	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&skyPsoDesc, IID_PPV_ARGS(&mPSOs["sky"])));
 
 }
 

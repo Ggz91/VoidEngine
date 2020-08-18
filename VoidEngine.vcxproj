@@ -177,6 +177,7 @@ xcopy /y /d ".\Modules\Common" "$(OutDir)..\Modules\Common"</Command>
     <ClInclude Include="Modules\EngineImp\VoidEngineImp.h" />
     <ClInclude Include="Modules\EngineWrapperImp\EngineWrapperImp.h" />
     <ClInclude Include="Modules\FrameResource\FrameResource.h" />
+    <ClInclude Include="Modules\RenderItemUtil\RenderItemUtil.h" />
     <ClInclude Include="Modules\ShadowMap\ShadowMap.h" />
     <ClInclude Include="Modules\Skin\SkinnedData.h" />
     <ClInclude Include="Modules\SSAO\Ssao.h" />
@@ -194,6 +195,7 @@ xcopy /y /d ".\Modules\Common" "$(OutDir)..\Modules\Common"</Command>
     <ClCompile Include="Modules\EngineImp\VoidEngineImp.cpp" />
     <ClCompile Include="Modules\EngineWrapperImp\EngineWrapperImp.cpp" />
     <ClCompile Include="Modules\FrameResource\FrameResource.cpp" />
+    <ClCompile Include="Modules\RenderItemUtil\RenderItemUtil.cpp" />
     <ClCompile Include="Modules\ShadowMap\ShadowMap.cpp" />
     <ClCompile Include="Modules\Skin\SkinnedData.cpp" />
     <ClCompile Include="Modules\SSAO\Ssao.cpp" />

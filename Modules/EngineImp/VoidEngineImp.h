@@ -39,7 +39,6 @@ private:
 	void UpdateSsaoCB(const GameTimer& gt);
 
 	void BuildRootSignature();
-	void BuildSsaoRootSignature();
 	void BuildDescriptorHeaps();
 	void BuildShadersAndInputLayout();
 	void BuildPSOs();
