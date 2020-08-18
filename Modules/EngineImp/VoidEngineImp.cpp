@@ -36,16 +36,9 @@ bool CVoidEgine::Initialize()
 	// Reset the command list to prep for initialization commands.
 	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
 
-	mCamera.SetPosition(0.0f, 2.0f, -15.0f);
+	mCamera.SetPosition(0.0f, 1500.0f, -0.0f);
+	mCamera.LookAt(mCamera.GetPosition3f(), XMFLOAT3(0, 0, 0), XMFLOAT3(0, 1, 0));
 	mCamera.UpdateViewMatrix();
-
-	mShadowMap = std::make_unique<ShadowMap>(md3dDevice.Get(),
-		2048, 2048);
-
-	mSsao = std::make_unique<Ssao>(
-		md3dDevice.Get(),
-		mCommandList.Get(),
-		mClientWidth, mClientHeight);
 
 	BuildRootSignature();
 	BuildDescriptorHeaps();
@@ -53,7 +46,6 @@ bool CVoidEgine::Initialize()
 	BuildFrameResources();
 	BuildPSOs();
 
-	mSsao->SetPSOs(mPSOs["ssao"].Get(), mPSOs["ssaoBlur"].Get());
 
 	// Execute the initialization commands.
 	ThrowIfFailed(mCommandList->Close());
@@ -68,7 +60,17 @@ bool CVoidEgine::Initialize()
 
 void CVoidEgine::PushModels(std::vector<RenderItem*>& render_items)
 {
+	FlushCommandQueue();
+	ThrowIfFailed(mDirectCmdListAlloc->Reset());
+	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
 	RenderItemUtil::FillGeoData(render_items, md3dDevice.Get(), mCommandList.Get());
+	ThrowIfFailed(mCommandList->Close());
+
+	ID3D12CommandList* cmd_lists[] = { mCommandList.Get() };
+	mCommandQueue->ExecuteCommandLists(_countof(cmd_lists), cmd_lists);
+	FlushCommandQueue();
+	
+
 	auto& opaque_items = mRitemLayer[(int)RenderLayer::Opaque];
 	opaque_items.insert(opaque_items.end(), render_items.begin(), render_items.end());
 
@@ -102,13 +104,6 @@ void CVoidEgine::OnResize()
 
 	mCamera.SetLens(0.25f * MathHelper::Pi, AspectRatio(), 1.0f, 1000.0f);
 
-	if (mSsao != nullptr)
-	{
-		mSsao->OnResize(mClientWidth, mClientHeight);
-
-		// Resources changed, so need to rebuild descriptors.
-		mSsao->RebuildDescriptors(mDepthStencilBuffer.Get());
-	}
 }
 
 void CVoidEgine::Update(const GameTimer& gt)
@@ -470,7 +465,7 @@ void CVoidEgine::BuildDescriptorHeaps()
 	// Create the SRV heap.
 	//
 	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-	srvHeapDesc.NumDescriptors = 64;
+	srvHeapDesc.NumDescriptors = mAllRitems.size() * gNumFrameResources + 1;
 	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
@@ -480,70 +475,22 @@ void CVoidEgine::BuildDescriptorHeaps()
 	//
 	CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 
-	std::vector<ComPtr<ID3D12Resource>> tex2DList =
-	{
-	};
-
-	//auto skyCubeMap = mTextures["skyCubeMap"]->Resource;
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	srvDesc.Texture2D.MostDetailedMip = 0;
-	srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
-
-	for (UINT i = 0; i < (UINT)tex2DList.size(); ++i)
-	{
-		srvDesc.Format = tex2DList[i]->GetDesc().Format;
-		srvDesc.Texture2D.MipLevels = tex2DList[i]->GetDesc().MipLevels;
-		md3dDevice->CreateShaderResourceView(tex2DList[i].Get(), &srvDesc, hDescriptor);
-
-		// next descriptor
-		hDescriptor.Offset(1, mCbvSrvUavDescriptorSize);
-	}
-
-// 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
-// 	srvDesc.TextureCube.MostDetailedMip = 0;
-// 	srvDesc.TextureCube.MipLevels = skyCubeMap->GetDesc().MipLevels;
-// 	srvDesc.TextureCube.ResourceMinLODClamp = 0.0f;
-	srvDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
-// 	md3dDevice->CreateShaderResourceView(skyCubeMap.Get(), &srvDesc, hDescriptor);
-
-	mSkyTexHeapIndex = (UINT)tex2DList.size();
-	mShadowMapHeapIndex = mSkyTexHeapIndex + 1;
-	mSsaoHeapIndexStart = mShadowMapHeapIndex + 1;
-	mSsaoAmbientMapIndex = mSsaoHeapIndexStart + 3;
-	mNullCubeSrvIndex = mSsaoHeapIndexStart + 5;
-	mNullTexSrvIndex1 = mNullCubeSrvIndex + 1;
-	mNullTexSrvIndex2 = mNullTexSrvIndex1 + 1;
-
-	auto nullSrv = GetCpuSrv(mNullCubeSrvIndex);
-	mNullSrv = GetGpuSrv(mNullCubeSrvIndex);
-
-	md3dDevice->CreateShaderResourceView(nullptr, &srvDesc, nullSrv);
-	nullSrv.Offset(1, mCbvSrvUavDescriptorSize);
-
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	srvDesc.Texture2D.MostDetailedMip = 0;
 	srvDesc.Texture2D.MipLevels = 1;
 	srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+
+	mNullCubeSrvIndex = 0;
+
+	auto nullSrv = GetCpuSrv(mNullCubeSrvIndex);
+	mNullSrv = GetGpuSrv(mNullCubeSrvIndex);
 	md3dDevice->CreateShaderResourceView(nullptr, &srvDesc, nullSrv);
-
-	nullSrv.Offset(1, mCbvSrvUavDescriptorSize);
+	
+	nullSrv.Offset(mAllRitems.size() * gNumFrameResources, mCbvSrvUavDescriptorSize);
 	md3dDevice->CreateShaderResourceView(nullptr, &srvDesc, nullSrv);
-
-	mShadowMap->BuildDescriptors(
-		GetCpuSrv(mShadowMapHeapIndex),
-		GetGpuSrv(mShadowMapHeapIndex),
-		GetDsv(1));
-
-	mSsao->BuildDescriptors(
-		mDepthStencilBuffer.Get(),
-		GetCpuSrv(mSsaoHeapIndexStart),
-		GetGpuSrv(mSsaoHeapIndexStart),
-		GetRtv(SwapChainBufferCount),
-		mCbvSrvUavDescriptorSize,
-		mRtvDescriptorSize);
 }
 
 void CVoidEgine::BuildShadersAndInputLayout()
@@ -593,6 +540,8 @@ void CVoidEgine::BuildPSOs()
 		mShaders["opaquePS"]->GetBufferSize()
 	};
 	opaquePsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	opaquePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
+	opaquePsoDesc.RasterizerState.FrontCounterClockwise = true;
 	opaquePsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 	opaquePsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
 	opaquePsoDesc.SampleMask = UINT_MAX;
