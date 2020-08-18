@@ -168,6 +168,7 @@ xcopy /y /d ".\Modules\Common" "$(OutDir)..\Modules\Common"</Command>
     <ClInclude Include="Modules\Common\d3dx12.h" />
     <ClInclude Include="Modules\Common\DDSTextureLoader.h" />
     <ClInclude Include="Modules\Common\GameTimer.h" />
+    <ClInclude Include="Modules\Common\GeometryDefines.h" />
     <ClInclude Include="Modules\Common\GeometryGenerator.h" />
     <ClInclude Include="Modules\Common\MathHelper.h" />
     <ClInclude Include="Modules\Common\RenderItems.h" />

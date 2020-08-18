@@ -321,7 +321,7 @@ void CVoidEgine::UpdateMaterialBuffer(const GameTimer& gt)
 		{
 			XMMATRIX matTransform = XMLoadFloat4x4(&mat->MatTransform);
 
-			MaterialData matData;
+			MatData matData;
 			matData.DiffuseAlbedo = mat->DiffuseAlbedo;
 			matData.FresnelR0 = mat->FresnelR0;
 			matData.Roughness = mat->Roughness;

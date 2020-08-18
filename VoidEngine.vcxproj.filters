@@ -39,9 +39,6 @@
     <ClInclude Include="framework.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="Common\CBaseEngine.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="Modules\EngineImp\VoidEngineImp.h">
       <Filter>EngineImp</Filter>
     </ClInclude>
@@ -66,34 +63,40 @@
     <ClInclude Include="VoidEngineInterface.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="Modules\Common\Camera.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="Modules\Common\d3dUtil.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="Modules\Common\d3dx12.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="Modules\Common\DDSTextureLoader.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="Modules\Common\GameTimer.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="Modules\Common\GeometryGenerator.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="Modules\Common\MathHelper.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="Modules\Common\UploadBuffer.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="Modules\EngineImp\CBaseEngine.h">
       <Filter>EngineImp</Filter>
     </ClInclude>
     <ClInclude Include="Modules\Common\RenderItems.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\Common\Camera.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\CBaseEngine.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\Common\d3dUtil.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\Common\d3dx12.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\Common\DDSTextureLoader.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\Common\GameTimer.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\Common\GeometryGenerator.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\Common\MathHelper.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\Common\UploadBuffer.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\Common\GeometryDefines.h">
       <Filter>Common</Filter>
     </ClInclude>
   </ItemGroup>
@@ -125,26 +128,26 @@
     <ClCompile Include="VoidEngineInterface.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="Modules\Common\Camera.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="Modules\Common\d3dUtil.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="Modules\Common\DDSTextureLoader.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="Modules\Common\GameTimer.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="Modules\Common\GeometryGenerator.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="Modules\Common\MathHelper.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="Modules\EngineImp\CBaseEngine.cpp">
       <Filter>EngineImp</Filter>
+    </ClCompile>
+    <ClCompile Include="Modules\Common\Camera.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Modules\Common\d3dUtil.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Modules\Common\DDSTextureLoader.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Modules\Common\GameTimer.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Modules\Common\GeometryGenerator.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Modules\Common\MathHelper.cpp">
+      <Filter>Common</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

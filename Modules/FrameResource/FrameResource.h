@@ -3,6 +3,7 @@
 #include "../Common/d3dUtil.h"
 #include "../Common/MathHelper.h"
 #include "../Common/UploadBuffer.h"
+#include "../Common/GeometryDefines.h"
 
 struct ObjectConstants
 {
@@ -66,38 +67,6 @@ struct SsaoConstants
     float SurfaceEpsilon = 0.05f;
 };
 
-struct MaterialData
-{
-	DirectX::XMFLOAT4 DiffuseAlbedo = { 1.0f, 1.0f, 1.0f, 1.0f };
-	DirectX::XMFLOAT3 FresnelR0 = { 0.01f, 0.01f, 0.01f };
-	float Roughness = 0.5f;
-
-	// Used in texture mapping.
-	DirectX::XMFLOAT4X4 MatTransform = MathHelper::Identity4x4();
-
-	UINT DiffuseMapIndex = 0;
-	UINT NormalMapIndex = 0;
-	UINT MaterialPad1;
-	UINT MaterialPad2;
-};
-
-struct Vertex
-{
-    DirectX::XMFLOAT3 Pos;
-    DirectX::XMFLOAT3 Normal;
-	DirectX::XMFLOAT2 TexC;
-	DirectX::XMFLOAT3 TangentU;
-};
-
-struct SkinnedVertex
-{
-    DirectX::XMFLOAT3 Pos;
-    DirectX::XMFLOAT3 Normal;
-    DirectX::XMFLOAT2 TexC;
-    DirectX::XMFLOAT3 TangentU;
-    DirectX::XMFLOAT3 BoneWeights;
-    BYTE BoneIndices[4];
-};
 
 // Stores the resources needed for the CPU to build the command lists
 // for a frame.  
@@ -120,7 +89,7 @@ public:
     std::unique_ptr<UploadBuffer<ObjectConstants>> ObjectCB = nullptr;
     std::unique_ptr<UploadBuffer<SkinnedConstants>> SkinnedCB = nullptr;
     std::unique_ptr<UploadBuffer<SsaoConstants>> SsaoCB = nullptr;
-	std::unique_ptr<UploadBuffer<MaterialData>> MaterialBuffer = nullptr;
+	std::unique_ptr<UploadBuffer<MatData>> MaterialBuffer = nullptr;
 
     // Fence value to mark commands up to this fence point.  This lets us
     // check if these frame resources are still in use by the GPU.

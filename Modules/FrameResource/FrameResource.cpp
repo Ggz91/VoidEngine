@@ -10,7 +10,7 @@ FrameResource::FrameResource(ID3D12Device* device, UINT passCount, UINT objectCo
     SsaoCB = std::make_unique<UploadBuffer<SsaoConstants>>(device, 1, true);
 	if (materialCount > 0)
 	{
-		MaterialBuffer = std::make_unique<UploadBuffer<MaterialData>>(device, materialCount, false);
+		MaterialBuffer = std::make_unique<UploadBuffer<MatData>>(device, materialCount, false);
 	}
 	if (objectCount > 0)
 	{
