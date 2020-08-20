@@ -52,10 +52,13 @@ void RenderItemUtil::FillSingleGeoData(RenderItem* render_item, ID3D12Device* de
 	render_item->StartIndexLocation = mesh.StartIndexLocation;
 	render_item->BaseVertexLocation = mesh.BaseVertexLocation;
 	render_item->IndexCount = mesh.IndexCount;
-
+	render_item->Mat = new Material();
+	CopyMemory(render_item->Mat, &data->Mat, sizeof(Material));
 	acc_param->IndexStartOffset += data->Mesh.Indices.size();
 	acc_param->BaseVertexOffset += data->Mesh.Vertices.size();
 
+	
 	geo->DrawArgs["architecture" + std::to_string(render_item->ObjCBIndex)] = mesh;
+
 }
 

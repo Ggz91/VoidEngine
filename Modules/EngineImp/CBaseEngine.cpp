@@ -239,7 +239,6 @@ bool CBaseEngine::InitDirect3D()
 	CreateCommandObjects();
     CreateSwapChain();
     CreateRtvAndDsvDescriptorHeaps();
-
 	return true;
 }
 

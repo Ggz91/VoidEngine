@@ -62,29 +62,39 @@ bool CVoidEgine::Initialize()
 
 void CVoidEgine::PushModels(std::vector<RenderItem*>& render_items)
 {
+	FlushCommandQueue();
+	ThrowIfFailed(mDirectCmdListAlloc->Reset());
+	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
+
 	PushRenderItems(render_items);
 	PushMats(render_items);
+
+	ThrowIfFailed(mCommandList->Close());
+	ID3D12CommandList* cmd_lists[] = { mCommandList.Get() };
+	mCommandQueue->ExecuteCommandLists(_countof(cmd_lists), cmd_lists);
+	FlushCommandQueue();
 }
 
 void CVoidEgine::CreateRtvAndDsvDescriptorHeaps()
 {
+	CBaseEngine::CreateRtvAndDsvDescriptorHeaps();
 	// Add +1 for screen normal map, +2 for ambient maps.
-	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc;
-	rtvHeapDesc.NumDescriptors = SwapChainBufferCount + 3;
-	rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-	rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-	rtvHeapDesc.NodeMask = 0;
-	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(
-		&rtvHeapDesc, IID_PPV_ARGS(mRtvHeap.GetAddressOf())));
+// 	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc;
+// 	rtvHeapDesc.NumDescriptors = SwapChainBufferCount + 3;
+// 	rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+// 	rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+// 	rtvHeapDesc.NodeMask = 0;
+// 	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(
+// 		&rtvHeapDesc, IID_PPV_ARGS(mRtvHeap.GetAddressOf())));
 
 	// Add +1 DSV for shadow map.
-	D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc;
-	dsvHeapDesc.NumDescriptors = 2;
-	dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
-	dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-	dsvHeapDesc.NodeMask = 0;
-	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(
-		&dsvHeapDesc, IID_PPV_ARGS(mDsvHeap.GetAddressOf())));
+// 	D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc;
+// 	dsvHeapDesc.NumDescriptors = 2;
+// 	dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+// 	dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+// 	dsvHeapDesc.NodeMask = 0;
+// 	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(
+// 		&dsvHeapDesc, IID_PPV_ARGS(mDsvHeap.GetAddressOf())));
 }
 
 void CVoidEgine::OnResize()
@@ -142,23 +152,10 @@ void CVoidEgine::Draw(const GameTimer& gt)
 	// Reusing the command list reuses memory.
 	ThrowIfFailed(mCommandList->Reset(cmdListAlloc.Get(), mPSOs["opaque"].Get()));
 
-	//ID3D12DescriptorHeap* descriptorHeaps[] = { mSrvDescriptorHeap.Get() };
-	//mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
+	ID3D12DescriptorHeap* descriptorHeaps[] = { mSrvDescriptorHeap.Get() };
+	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 	mCommandList->SetGraphicsRootSignature(mRootSignature.Get());
 
-	// Rebind state whenever graphics root signature changes.
-
-	// Bind all the materials used in this scene.  For structured buffers, we can bypass the heap and 
-	// set as a root descriptor.
-	if (NULL != mCurrFrameResource->MaterialBuffer)
-	{
-		auto matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
-		mCommandList->SetGraphicsRootShaderResourceView(3, matBuffer->GetGPUVirtualAddress());
-	}
-	if (0 != mTextures.size())
-	{
-		mCommandList->SetGraphicsRootDescriptorTable(4, mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-	}
 
 	mCommandList->RSSetViewports(1, &mScreenViewport);
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
@@ -177,12 +174,18 @@ void CVoidEgine::Draw(const GameTimer& gt)
 	auto passCB = mCurrFrameResource->PassCB->Resource();
 	mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress());
 
-	// Bind the sky cube map.  For our demos, we just use one "world" cube map representing the environment
-	// from far away, so all objects will use the same cube map and we only need to set it once per-frame.  
-	// If we wanted to use "local" cube maps, we would have to change them per-object, or dynamically
-	// index into an array of cube maps.
-
 	mCommandList->SetPipelineState(mPSOs["opaque"].Get());
+	// Bind all the materials used in this scene.  For structured buffers, we can bypass the heap and 
+	// set as a root descriptor.
+	if (NULL != mCurrFrameResource->MaterialBuffer)
+	{
+		auto matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
+		mCommandList->SetGraphicsRootShaderResourceView(2, matBuffer->GetGPUVirtualAddress());
+	}
+	if (0 != mTextures.size())
+	{
+		mCommandList->SetGraphicsRootDescriptorTable(3, mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	}
 	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
 
 	// Indicate a state transition on the resource usage.
@@ -248,7 +251,7 @@ void CVoidEgine::UpdateMaterialBuffer(const GameTimer& gt)
 		if (mat->NumFramesDirty > 0)
 		{
 			XMMATRIX matTransform = XMLoadFloat4x4(&mat->MatTransform);
-
+			
 			MatData matData;
 			matData.DiffuseAlbedo = mat->DiffuseAlbedo;
 			matData.FresnelR0 = mat->FresnelR0;
@@ -420,22 +423,21 @@ void CVoidEgine::UpdateSsaoCB(const GameTimer& gt)
 void CVoidEgine::BuildRootSignature()
 {
 	// Root parameter can be a table, root descriptor or root constants.
-	CD3DX12_ROOT_PARAMETER slotRootParameter[5];
+	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
 
 	CD3DX12_DESCRIPTOR_RANGE tex_table;
-	tex_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+	tex_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 48, 0, 0);
 
 	// Perfomance TIP: Order from most frequent to least frequent.
 	slotRootParameter[0].InitAsConstantBufferView(0);
 	slotRootParameter[1].InitAsConstantBufferView(1);
-	slotRootParameter[2].InitAsConstantBufferView(2);
-	slotRootParameter[3].InitAsShaderResourceView(0, 1);
-	slotRootParameter[4].InitAsDescriptorTable(1, &tex_table, D3D12_SHADER_VISIBILITY_PIXEL);
+	slotRootParameter[2].InitAsShaderResourceView(0, 1);
+	slotRootParameter[3].InitAsDescriptorTable(1, &tex_table, D3D12_SHADER_VISIBILITY_PIXEL);
 
 	auto staticSamplers = GetStaticSamplers();
 
 	// A root signature is an array of root parameters.
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(3, slotRootParameter,
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter,
 		(UINT)staticSamplers.size(), staticSamplers.data(),
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
@@ -474,13 +476,14 @@ void CVoidEgine::BuildDescriptorHeaps()
 	srvDesc.Texture2D.MostDetailedMip = 0;
 	srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 	auto  itr = mTextures.begin();
-	while (itr++ != mTextures.end())
+	while (itr != mTextures.end())
 	{
 		srvDesc.Format = itr->second->Resource->GetDesc().Format;
 		srvDesc.Texture2D.MipLevels = itr->second->Resource->GetDesc().MipLevels;
 		md3dDevice->CreateShaderResourceView(itr->second->Resource.Get(), &srvDesc, hDescriptor);
 
 		hDescriptor.Offset(1, mCbvSrvUavDescriptorSize);
+		itr++;
 	}
 }
 
@@ -531,7 +534,7 @@ void CVoidEgine::BuildPSOs()
 		mShaders["opaquePS"]->GetBufferSize()
 	};
 	opaquePsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-	opaquePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
+	opaquePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
 	opaquePsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 	opaquePsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 	opaquePsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
@@ -655,18 +658,9 @@ void CVoidEgine::DrawNormalsAndDepth()
 
 void CVoidEgine::PushRenderItems(std::vector<RenderItem*>& render_items)
 {
-	FlushCommandQueue();
-	ThrowIfFailed(mDirectCmdListAlloc->Reset());
-	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
+	
 	RenderItemUtil::FillGeoData(render_items, md3dDevice.Get(), mCommandList.Get());
-	ThrowIfFailed(mCommandList->Close());
-
-	ID3D12CommandList* cmd_lists[] = { mCommandList.Get() };
-	mCommandQueue->ExecuteCommandLists(_countof(cmd_lists), cmd_lists);
-	FlushCommandQueue();
-
-
-
+	
 	auto& opaque_items = mRitemLayer[(int)RenderLayer::Opaque];
 	opaque_items.insert(opaque_items.end(), render_items.begin(), render_items.end());
 
@@ -676,27 +670,49 @@ void CVoidEgine::PushRenderItems(std::vector<RenderItem*>& render_items)
 void CVoidEgine::PushMats(std::vector<RenderItem*>& render_items)
 {
 	//LoadTexture
+	int tex_index = 0;
+	std::unordered_map<std::string, int> tex_indices;
 	for (int i=0; i<render_items.size(); ++i)
 	{
 		//DiffuseMap
-		auto diffuse_map = std::make_unique<Texture>();
-		diffuse_map->Name = render_items[i]->Mat->Name + "_diffuse";
-		diffuse_map->Filename = AnsiToWString(render_items[i]->Mat->DiffuseMapPath.c_str());
-		ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
-			mCommandList.Get(), diffuse_map->Filename.c_str(),
-			diffuse_map->Resource, diffuse_map->UploadHeap));
-		render_items[i]->Mat->DiffuseSrvHeapIndex = 2 * i;
-		mTextures[diffuse_map->Name] = std::move(diffuse_map);
+		auto diffuse_tex_itr = tex_indices.find(render_items[i]->Mat->Name + "_diffuse");
+		if (tex_indices.end() != diffuse_tex_itr)
+		{
+			render_items[i]->Mat->DiffuseSrvHeapIndex = diffuse_tex_itr->second;
+		}
+		else
+		{
+			auto diffuse_map = std::make_unique<Texture>();
+			diffuse_map->Name = render_items[i]->Mat->Name + "_diffuse";
+			diffuse_map->Filename = AnsiToWString(render_items[i]->Mat->DiffuseMapPath.c_str());
+			ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
+				mCommandList.Get(), diffuse_map->Filename.c_str(),
+				diffuse_map->Resource, diffuse_map->UploadHeap));
+			render_items[i]->Mat->DiffuseSrvHeapIndex = tex_index++;
+			tex_indices[diffuse_map->Name] = render_items[i]->Mat->DiffuseSrvHeapIndex;
+			mTextures[diffuse_map->Name] = std::move(diffuse_map);
+		}
+		
 
 		//NormalMap
-		auto normal_map = std::make_unique<Texture>();
-		normal_map->Name = render_items[i]->Mat->Name + "_normal";
-		normal_map->Filename = AnsiToWString(render_items[i]->Mat->NormalMapPath.c_str());
-		ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
-			mCommandList.Get(), normal_map->Filename.c_str(),
-			normal_map->Resource, normal_map->UploadHeap));
-		render_items[i]->Mat->NormalSrvHeapIndex = 2 * i + 1;
-		mTextures[normal_map->Name] = std::move(normal_map);
+		auto normal_tex_itr = tex_indices.find(render_items[i]->Mat->Name + "_normal");
+		if (tex_indices.end() != normal_tex_itr)
+		{
+			render_items[i]->Mat->NormalSrvHeapIndex = normal_tex_itr->second;
+		}
+		else
+		{
+			auto normal_map = std::make_unique<Texture>();
+			normal_map->Name = render_items[i]->Mat->Name + "_normal";
+			normal_map->Filename = AnsiToWString(render_items[i]->Mat->NormalMapPath.c_str());
+			ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
+				mCommandList.Get(), normal_map->Filename.c_str(),
+				normal_map->Resource, normal_map->UploadHeap));
+			render_items[i]->Mat->NormalSrvHeapIndex = tex_index++;
+			tex_indices[normal_map->Name] = render_items[i]->Mat->NormalSrvHeapIndex;
+			mTextures[normal_map->Name] = std::move(normal_map);
+		}
+		
 
 		mMaterials[render_items[i]->Mat->Name] = std::move(render_items[i]->Mat);
 	}
