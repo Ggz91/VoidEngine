@@ -58,23 +58,12 @@ bool CVoidEgine::Initialize()
 	return true;
 }
 
+
+
 void CVoidEgine::PushModels(std::vector<RenderItem*>& render_items)
 {
-	FlushCommandQueue();
-	ThrowIfFailed(mDirectCmdListAlloc->Reset());
-	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
-	RenderItemUtil::FillGeoData(render_items, md3dDevice.Get(), mCommandList.Get());
-	ThrowIfFailed(mCommandList->Close());
-
-	ID3D12CommandList* cmd_lists[] = { mCommandList.Get() };
-	mCommandQueue->ExecuteCommandLists(_countof(cmd_lists), cmd_lists);
-	FlushCommandQueue();
-	
-
-	auto& opaque_items = mRitemLayer[(int)RenderLayer::Opaque];
-	opaque_items.insert(opaque_items.end(), render_items.begin(), render_items.end());
-
-	mAllRitems.insert(mAllRitems.end(), render_items.begin(), render_items.end());
+	PushRenderItems(render_items);
+	PushMats(render_items);
 }
 
 void CVoidEgine::CreateRtvAndDsvDescriptorHeaps()
@@ -166,6 +155,10 @@ void CVoidEgine::Draw(const GameTimer& gt)
 		auto matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
 		mCommandList->SetGraphicsRootShaderResourceView(3, matBuffer->GetGPUVirtualAddress());
 	}
+	if (0 != mTextures.size())
+	{
+		mCommandList->SetGraphicsRootDescriptorTable(4, mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	}
 
 	mCommandList->RSSetViewports(1, &mScreenViewport);
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
@@ -251,7 +244,7 @@ void CVoidEgine::UpdateMaterialBuffer(const GameTimer& gt)
 	{
 		// Only update the cbuffer data if the constants have changed.  If the cbuffer
 		// data changes, it needs to be updated for each FrameResource.
-		Material* mat = e.second.get();
+		Material* mat = e.second;
 		if (mat->NumFramesDirty > 0)
 		{
 			XMMATRIX matTransform = XMLoadFloat4x4(&mat->MatTransform);
@@ -427,16 +420,22 @@ void CVoidEgine::UpdateSsaoCB(const GameTimer& gt)
 void CVoidEgine::BuildRootSignature()
 {
 	// Root parameter can be a table, root descriptor or root constants.
-	CD3DX12_ROOT_PARAMETER slotRootParameter[2];
+	CD3DX12_ROOT_PARAMETER slotRootParameter[5];
+
+	CD3DX12_DESCRIPTOR_RANGE tex_table;
+	tex_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
 
 	// Perfomance TIP: Order from most frequent to least frequent.
 	slotRootParameter[0].InitAsConstantBufferView(0);
 	slotRootParameter[1].InitAsConstantBufferView(1);
+	slotRootParameter[2].InitAsConstantBufferView(2);
+	slotRootParameter[3].InitAsShaderResourceView(0, 1);
+	slotRootParameter[4].InitAsDescriptorTable(1, &tex_table, D3D12_SHADER_VISIBILITY_PIXEL);
 
 	auto staticSamplers = GetStaticSamplers();
 
 	// A root signature is an array of root parameters.
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(2, slotRootParameter,
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(3, slotRootParameter,
 		(UINT)staticSamplers.size(), staticSamplers.data(),
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
@@ -461,6 +460,28 @@ void CVoidEgine::BuildRootSignature()
 
 void CVoidEgine::BuildDescriptorHeaps()
 {
+	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
+	srvHeapDesc.NumDescriptors = mTextures.size();
+	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MostDetailedMip = 0;
+	srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+	auto  itr = mTextures.begin();
+	while (itr++ != mTextures.end())
+	{
+		srvDesc.Format = itr->second->Resource->GetDesc().Format;
+		srvDesc.Texture2D.MipLevels = itr->second->Resource->GetDesc().MipLevels;
+		md3dDevice->CreateShaderResourceView(itr->second->Resource.Get(), &srvDesc, hDescriptor);
+
+		hDescriptor.Offset(1, mCbvSrvUavDescriptorSize);
+	}
 }
 
 void CVoidEgine::BuildShadersAndInputLayout()
@@ -631,6 +652,57 @@ void CVoidEgine::DrawNormalsAndDepth()
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(normalMap,
 		D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ));
 }
+
+void CVoidEgine::PushRenderItems(std::vector<RenderItem*>& render_items)
+{
+	FlushCommandQueue();
+	ThrowIfFailed(mDirectCmdListAlloc->Reset());
+	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
+	RenderItemUtil::FillGeoData(render_items, md3dDevice.Get(), mCommandList.Get());
+	ThrowIfFailed(mCommandList->Close());
+
+	ID3D12CommandList* cmd_lists[] = { mCommandList.Get() };
+	mCommandQueue->ExecuteCommandLists(_countof(cmd_lists), cmd_lists);
+	FlushCommandQueue();
+
+
+
+	auto& opaque_items = mRitemLayer[(int)RenderLayer::Opaque];
+	opaque_items.insert(opaque_items.end(), render_items.begin(), render_items.end());
+
+	mAllRitems.insert(mAllRitems.end(), render_items.begin(), render_items.end());
+}
+
+void CVoidEgine::PushMats(std::vector<RenderItem*>& render_items)
+{
+	//LoadTexture
+	for (int i=0; i<render_items.size(); ++i)
+	{
+		//DiffuseMap
+		auto diffuse_map = std::make_unique<Texture>();
+		diffuse_map->Name = render_items[i]->Mat->Name + "_diffuse";
+		diffuse_map->Filename = AnsiToWString(render_items[i]->Mat->DiffuseMapPath.c_str());
+		ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
+			mCommandList.Get(), diffuse_map->Filename.c_str(),
+			diffuse_map->Resource, diffuse_map->UploadHeap));
+		render_items[i]->Mat->DiffuseSrvHeapIndex = 2 * i;
+		mTextures[diffuse_map->Name] = std::move(diffuse_map);
+
+		//NormalMap
+		auto normal_map = std::make_unique<Texture>();
+		normal_map->Name = render_items[i]->Mat->Name + "_normal";
+		normal_map->Filename = AnsiToWString(render_items[i]->Mat->NormalMapPath.c_str());
+		ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
+			mCommandList.Get(), normal_map->Filename.c_str(),
+			normal_map->Resource, normal_map->UploadHeap));
+		render_items[i]->Mat->NormalSrvHeapIndex = 2 * i + 1;
+		mTextures[normal_map->Name] = std::move(normal_map);
+
+		mMaterials[render_items[i]->Mat->Name] = std::move(render_items[i]->Mat);
+	}
+	
+}
+
 CD3DX12_CPU_DESCRIPTOR_HANDLE CVoidEgine::GetCpuSrv(int index)const
 {
 	auto srv = CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
