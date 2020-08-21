@@ -54,6 +54,8 @@ private:
 	CD3DX12_CPU_DESCRIPTOR_HANDLE GetCpuSrv(int index)const;
 	CD3DX12_GPU_DESCRIPTOR_HANDLE GetGpuSrv(int index)const;
 	CD3DX12_CPU_DESCRIPTOR_HANDLE GetDsv(int index)const;
+
+
 	CD3DX12_CPU_DESCRIPTOR_HANDLE GetRtv(int index)const;
 
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 7> GetStaticSamplers();
@@ -123,5 +125,5 @@ private:
 	};
 	XMFLOAT3 mRotatedLightDirections[3];
 
-
+	Microsoft::WRL::ComPtr<ID3D12Resource> m_g_buffer;
 };

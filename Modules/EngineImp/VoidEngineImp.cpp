@@ -20,6 +20,7 @@ CVoidEgine::CVoidEgine(HINSTANCE hInstance, HWND wnd)
 	// position and compute the bounding sphere.
 	mSceneBounds.Center = XMFLOAT3(0.0f, 0.0f, 0.0f);
 	mSceneBounds.Radius = sqrtf(10.0f * 10.0f + 15.0f * 15.0f);
+	m_use_deferred_texturing = true;
 }
 
 CVoidEgine::~CVoidEgine()
@@ -79,24 +80,34 @@ void CVoidEgine::PushModels(std::vector<RenderItem*>& render_items)
 
 void CVoidEgine::CreateRtvAndDsvDescriptorHeaps()
 {
-	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc;
-	rtvHeapDesc.NumDescriptors = SwapChainBufferCount;
-	rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-	rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-	rtvHeapDesc.NodeMask = 0;
-	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(
-		&rtvHeapDesc, IID_PPV_ARGS(mRtvHeap.GetAddressOf())));
+	if (m_use_deferred_texturing)
+	{
+		//+1 for G-Buffer
+		D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc;
+		rtvHeapDesc.NumDescriptors = SwapChainBufferCount + 1;
+		rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+		rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+		rtvHeapDesc.NodeMask = 0;
+		ThrowIfFailed(md3dDevice->CreateDescriptorHeap(
+			&rtvHeapDesc, IID_PPV_ARGS(mRtvHeap.GetAddressOf())));
 
 
-	D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc;
-	dsvHeapDesc.NumDescriptors = 1;
-	dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
-	dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-	dsvHeapDesc.NodeMask = 0;
-	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(
-		&dsvHeapDesc, IID_PPV_ARGS(mDsvHeap.GetAddressOf())));
+		D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc;
+		dsvHeapDesc.NumDescriptors = 1;
+		dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+		dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+		dsvHeapDesc.NodeMask = 0;
+		ThrowIfFailed(md3dDevice->CreateDescriptorHeap(
+			&dsvHeapDesc, IID_PPV_ARGS(mDsvHeap.GetAddressOf())));
 
-	//G-buffer
+		//G-buffer
+		CreateGBufferRTV();
+	}
+	else
+	{
+		CBaseEngine::CreateRtvAndDsvDescriptorHeaps();
+	}
+	
 	
 }
 
@@ -230,7 +241,80 @@ void CVoidEgine::DrawWithZBuffer(const GameTimer& gt)
 
 void CVoidEgine::DrawWithDeferredTexturing(const GameTimer& gt)
 {
+	auto cmdListAlloc = mCurrFrameResource->CmdListAlloc;
 
+	// Reuse the memory associated with command recording.
+	// We can only reset when the associated command lists have finished execution on the GPU.
+	ThrowIfFailed(cmdListAlloc->Reset());
+
+	// A command list can be reset after it has been added to the command queue via ExecuteCommandList.
+	// Reusing the command list reuses memory.
+	ThrowIfFailed(mCommandList->Reset(cmdListAlloc.Get(), mPSOs["DeferredOpaque"].Get()));
+
+	ID3D12DescriptorHeap* descriptorHeaps[] = { mSrvDescriptorHeap.Get() };
+	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
+	mCommandList->SetGraphicsRootSignature(mRootSignature.Get());
+
+
+	mCommandList->RSSetViewports(1, &mScreenViewport);
+	mCommandList->RSSetScissorRects(1, &mScissorRect);
+
+	// Indicate a state transition on the resource usage.
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer.Get(),
+		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+
+	// Clear the back buffer and depth buffer.
+	CD3DX12_CPU_DESCRIPTOR_HANDLE g_buffer_handle(mRtvHeap->GetCPUDescriptorHandleForHeapStart(),
+		SwapChainBufferCount,
+		mRtvDescriptorSize);
+	mCommandList->ClearRenderTargetView(g_buffer_handle, Colors::LightSteelBlue, 0, nullptr);
+	mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+
+	// Specify the buffers we are going to render to.
+	mCommandList->OMSetRenderTargets(1, 
+		&g_buffer_handle, 
+		true, 
+		&DepthStencilView());
+
+	auto passCB = mCurrFrameResource->PassCB->Resource();
+	mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress());
+
+	mCommandList->SetPipelineState(mPSOs["DeferredOpaque"].Get());
+	// Bind all the materials used in this scene.  For structured buffers, we can bypass the heap and 
+	// set as a root descriptor.
+	if (NULL != mCurrFrameResource->MaterialBuffer)
+	{
+		auto matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
+		mCommandList->SetGraphicsRootShaderResourceView(2, matBuffer->GetGPUVirtualAddress());
+	}
+	if (0 != mTextures.size())
+	{
+		mCommandList->SetGraphicsRootDescriptorTable(3, mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	}
+	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
+
+	// Indicate a state transition on the resource usage.
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer.Get(),
+		D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+
+	// Done recording commands.
+	ThrowIfFailed(mCommandList->Close());
+
+	// Add the command list to the queue for execution.
+	ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
+	mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
+
+	// Swap the back and front buffers
+	ThrowIfFailed(mSwapChain->Present(0, 0));
+	mCurrBackBuffer = (mCurrBackBuffer + 1) % SwapChainBufferCount;
+
+	// Advance the fence value to mark commands up to this fence point.
+	mCurrFrameResource->Fence = ++mCurrentFence;
+
+	// Add an instruction to the command queue to set a new fence point. 
+	// Because we are on the GPU timeline, the new fence point won't be 
+	// set until the GPU finishes processing all the commands prior to this Signal().
+	mCommandQueue->Signal(mFence.Get(), mCurrentFence);
 }
 
 void CVoidEgine::UpdateObjectCBs(const GameTimer& gt)
@@ -483,8 +567,9 @@ void CVoidEgine::BuildRootSignature()
 
 void CVoidEgine::BuildDescriptorHeaps()
 {
+	//+2 for g-buffers
 	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-	srvHeapDesc.NumDescriptors = mTextures.size();
+	srvHeapDesc.NumDescriptors = mTextures.size()+1;
 	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
@@ -506,6 +591,18 @@ void CVoidEgine::BuildDescriptorHeaps()
 		hDescriptor.Offset(1, mCbvSrvUavDescriptorSize);
 		itr++;
 	}
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC gbuffer_srv_desc = {};
+	gbuffer_srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	gbuffer_srv_desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	gbuffer_srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+	gbuffer_srv_desc.Texture2DArray.MostDetailedMip = 0;
+	gbuffer_srv_desc.Texture2DArray.MipLevels = 1;
+	gbuffer_srv_desc.Texture2DArray.ResourceMinLODClamp = 0.0f;
+	gbuffer_srv_desc.Texture2DArray.FirstArraySlice = 0;
+	gbuffer_srv_desc.Texture2DArray.ArraySize = 2;
+	gbuffer_srv_desc.Texture2DArray.PlaneSlice = 0;
+	md3dDevice->CreateShaderResourceView(m_g_buffer.Get(), &gbuffer_srv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 1, mCbvSrvUavDescriptorSize));
 }
 
 void CVoidEgine::BuildShadersAndInputLayout()
@@ -513,7 +610,8 @@ void CVoidEgine::BuildShadersAndInputLayout()
 
 	mShaders["standardVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Default.hlsl", nullptr, "VS", "vs_5_1");
 	mShaders["opaquePS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Default.hlsl", nullptr, "PS", "ps_5_1");
-
+	mShaders["DeferredVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Default.hlsl", nullptr, "DeferredVS", "vs_5_1");
+	mShaders["DeferredPS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Default.hlsl", nullptr, "DeferredPS", "ps_5_1");
 	mInputLayout =
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
@@ -568,6 +666,18 @@ void CVoidEgine::BuildPSOs()
 	opaquePsoDesc.DSVFormat = mDepthStencilFormat;
 	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&mPSOs["opaque"])));
 
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC deferred_pso_desc = opaquePsoDesc;
+	deferred_pso_desc.VS =
+	{
+		reinterpret_cast<BYTE*>(mShaders["DeferredVS"]->GetBufferPointer()),
+		mShaders["DeferredVS"]->GetBufferSize()
+	};
+	deferred_pso_desc.PS =
+	{
+		reinterpret_cast<BYTE*>(mShaders["DeferredPS"]->GetBufferPointer()),
+		mShaders["DeferredPS"]->GetBufferSize()
+	}; 
+	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&mPSOs["DeferredOpaque"])));
 }
 
 void CVoidEgine::BuildFrameResources()
@@ -840,7 +950,35 @@ std::array<const CD3DX12_STATIC_SAMPLER_DESC, 7> CVoidEgine::GetStaticSamplers()
 
 void CVoidEgine::CreateGBufferRTV()
 {
+	D3D12_RESOURCE_DESC tex_desc;
+	tex_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	tex_desc.Alignment = 0;
+	tex_desc.Width = mClientWidth;
+	tex_desc.Height = mClientHeight;
+	tex_desc.DepthOrArraySize = 2;
+	tex_desc.MipLevels = 1;
+	tex_desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	tex_desc.SampleDesc.Count = 1;
+	tex_desc.SampleDesc.Quality = 0;
+	tex_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	tex_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+	ThrowIfFailed(md3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), 
+		D3D12_HEAP_FLAG_NONE, 
+		&tex_desc, 
+		D3D12_RESOURCE_STATE_GENERIC_READ, 
+		nullptr, 
+		IID_PPV_ARGS(&m_g_buffer)));
+
 	D3D12_RENDER_TARGET_VIEW_DESC rt_desc;
-	rt_desc.
+	rt_desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	rt_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
+	rt_desc.Texture2DArray.FirstArraySlice = 0;
+	rt_desc.Texture2DArray.ArraySize = 2;
+	rt_desc.Texture2DArray.MipSlice = 0;
+	rt_desc.Texture2DArray.PlaneSlice = 0;
+	CD3DX12_CPU_DESCRIPTOR_HANDLE h(CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), SwapChainBufferCount, mRtvDescriptorSize));
+	md3dDevice->CreateRenderTargetView(m_g_buffer.Get(), &rt_desc, h);
+
+		
 }
 
