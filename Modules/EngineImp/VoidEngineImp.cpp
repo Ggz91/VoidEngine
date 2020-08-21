@@ -75,26 +75,29 @@ void CVoidEgine::PushModels(std::vector<RenderItem*>& render_items)
 	FlushCommandQueue();
 }
 
+
+
 void CVoidEgine::CreateRtvAndDsvDescriptorHeaps()
 {
-	CBaseEngine::CreateRtvAndDsvDescriptorHeaps();
-	// Add +1 for screen normal map, +2 for ambient maps.
-// 	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc;
-// 	rtvHeapDesc.NumDescriptors = SwapChainBufferCount + 3;
-// 	rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-// 	rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-// 	rtvHeapDesc.NodeMask = 0;
-// 	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(
-// 		&rtvHeapDesc, IID_PPV_ARGS(mRtvHeap.GetAddressOf())));
+	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc;
+	rtvHeapDesc.NumDescriptors = SwapChainBufferCount;
+	rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+	rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+	rtvHeapDesc.NodeMask = 0;
+	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(
+		&rtvHeapDesc, IID_PPV_ARGS(mRtvHeap.GetAddressOf())));
 
-	// Add +1 DSV for shadow map.
-// 	D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc;
-// 	dsvHeapDesc.NumDescriptors = 2;
-// 	dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
-// 	dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-// 	dsvHeapDesc.NodeMask = 0;
-// 	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(
-// 		&dsvHeapDesc, IID_PPV_ARGS(mDsvHeap.GetAddressOf())));
+
+	D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc;
+	dsvHeapDesc.NumDescriptors = 1;
+	dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+	dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+	dsvHeapDesc.NodeMask = 0;
+	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(
+		&dsvHeapDesc, IID_PPV_ARGS(mDsvHeap.GetAddressOf())));
+
+	//G-buffer
+	
 }
 
 void CVoidEgine::OnResize()
@@ -141,6 +144,19 @@ void CVoidEgine::Update(const GameTimer& gt)
 }
 
 void CVoidEgine::Draw(const GameTimer& gt)
+{
+	if (m_use_deferred_texturing)
+	{
+		DrawWithDeferredTexturing(gt);
+	}
+	else
+	{
+		DrawWithZBuffer(gt);
+	}
+	
+}
+
+void CVoidEgine::DrawWithZBuffer(const GameTimer& gt)
 {
 	auto cmdListAlloc = mCurrFrameResource->CmdListAlloc;
 
@@ -210,6 +226,11 @@ void CVoidEgine::Draw(const GameTimer& gt)
 	// Because we are on the GPU timeline, the new fence point won't be 
 	// set until the GPU finishes processing all the commands prior to this Signal().
 	mCommandQueue->Signal(mFence.Get(), mCurrentFence);
+}
+
+void CVoidEgine::DrawWithDeferredTexturing(const GameTimer& gt)
+{
+
 }
 
 void CVoidEgine::UpdateObjectCBs(const GameTimer& gt)
@@ -815,5 +836,11 @@ std::array<const CD3DX12_STATIC_SAMPLER_DESC, 7> CVoidEgine::GetStaticSamplers()
 		anisotropicWrap, anisotropicClamp,
 		shadow
 	};
+}
+
+void CVoidEgine::CreateGBufferRTV()
+{
+	D3D12_RENDER_TARGET_VIEW_DESC rt_desc;
+	rt_desc.
 }
 

@@ -22,6 +22,7 @@ void CBaseEngine::Debug()
 
 CBaseEngine::CBaseEngine(HINSTANCE hInstance, HWND wnd)
 :	mhAppInst(hInstance), mhMainWnd(wnd)
+    , m_use_deferred_texturing(false)
 {
     // Only one D3DApp can be constructed.
     assert(m_engine == nullptr);

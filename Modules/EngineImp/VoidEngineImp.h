@@ -30,6 +30,9 @@ private:
 	virtual void OnResize()override;
 	virtual void Update(const GameTimer& gt)override;
 	virtual void Draw(const GameTimer& gt)override;
+	
+	void DrawWithZBuffer(const GameTimer& gt);
+	void DrawWithDeferredTexturing(const GameTimer& gt);
 
 	void UpdateObjectCBs(const GameTimer& gt);
 	void UpdateMaterialBuffer(const GameTimer& gt);
@@ -55,6 +58,7 @@ private:
 
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 7> GetStaticSamplers();
 
+	void CreateGBufferRTV();
 private:
 
 	std::vector<std::unique_ptr<FrameResource>> mFrameResources;
@@ -118,5 +122,6 @@ private:
 		XMFLOAT3(0.0f, -0.707f, -0.707f)
 	};
 	XMFLOAT3 mRotatedLightDirections[3];
+
 
 };
