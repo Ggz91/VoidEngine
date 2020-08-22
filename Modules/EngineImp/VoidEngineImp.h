@@ -61,6 +61,7 @@ private:
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 7> GetStaticSamplers();
 
 	void CreateGBufferRTV();
+	UINT GBufferSize() const;
 private:
 
 	std::vector<std::unique_ptr<FrameResource>> mFrameResources;
@@ -125,5 +126,5 @@ private:
 	};
 	XMFLOAT3 mRotatedLightDirections[3];
 
-	Microsoft::WRL::ComPtr<ID3D12Resource> m_g_buffer;
+	Microsoft::WRL::ComPtr<ID3D12Resource> m_g_buffer[2];
 };
