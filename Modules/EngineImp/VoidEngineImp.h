@@ -64,6 +64,8 @@ private:
 
 	void BuildZbufferRootSignature();
 	void BuildDeferredRootSignature();
+	void BuildDeferredGSRootSignature();
+	void BuildDeferredShadingRootSignature();
 private:
 
 	std::vector<std::unique_ptr<FrameResource>> mFrameResources;
@@ -72,6 +74,7 @@ private:
 
 	ComPtr<ID3D12RootSignature> mRootSignature = nullptr;
 	ComPtr<ID3D12RootSignature> m_deferred_gs_root_signature = nullptr;
+	ComPtr<ID3D12RootSignature> m_deferred_shading_root_signature = nullptr;
 	ComPtr<ID3D12RootSignature> mSsaoRootSignature = nullptr;
 
 	ComPtr<ID3D12DescriptorHeap> mSrvDescriptorHeap = nullptr;

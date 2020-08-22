@@ -537,15 +537,14 @@ void CVoidEgine::BuildDescriptorHeaps()
 		gbuffer_srv_desc.Texture2D.ResourceMinLODClamp = 0;
 		md3dDevice->CreateShaderResourceView(m_g_buffer[i].Get(), &gbuffer_srv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mTextures.size()+i, mCbvSrvUavDescriptorSize));
 	}
-	
 }
 
 void CVoidEgine::BuildShadersAndInputLayout()
 {
 	if (m_use_deferred_texturing)
 	{
-		mShaders["DeferredVS"] = d3dUtil::CompileShader(L".\\Shaders\\Default.hlsl", nullptr, "DeferredVS", "vs_5_1");
-		mShaders["DeferredPS"] = d3dUtil::CompileShader(L".\\Shaders\\Default.hlsl", nullptr, "DeferredPS", "ps_5_1");
+		mShaders["DeferredVS"] = d3dUtil::CompileShader(L".\\Shaders\\DeferredGSShader.hlsl", nullptr, "DeferredVS", "vs_5_1");
+		mShaders["DeferredPS"] = d3dUtil::CompileShader(L".\\Shaders\\DeferredGSShader.hlsl", nullptr, "DeferredPS", "ps_5_1");
 	}
 	else
 	{
@@ -1046,6 +1045,12 @@ void CVoidEgine::BuildZbufferRootSignature()
 
 void CVoidEgine::BuildDeferredRootSignature()
 {
+	BuildDeferredGSRootSignature();
+	BuildDeferredShadingRootSignature();
+}
+
+void CVoidEgine::BuildDeferredGSRootSignature()
+{
 	// Root parameter can be a table, root descriptor or root constants.
 	CD3DX12_ROOT_PARAMETER slotRootParameter[2];
 
@@ -1077,5 +1082,10 @@ void CVoidEgine::BuildDeferredRootSignature()
 		serializedRootSig->GetBufferPointer(),
 		serializedRootSig->GetBufferSize(),
 		IID_PPV_ARGS(m_deferred_gs_root_signature.GetAddressOf())));
+}
+
+void CVoidEgine::BuildDeferredShadingRootSignature()
+{
+
 }
 
