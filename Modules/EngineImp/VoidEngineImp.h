@@ -42,6 +42,8 @@ private:
 	void BuildDescriptorHeaps();
 	void BuildShadersAndInputLayout();
 	void BuildPSOs();
+	void BuildZBufferPSO();
+	void BuildDeferredPSO();
 	void BuildFrameResources();
 	void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems);
 	void DrawSceneToShadowMap();
