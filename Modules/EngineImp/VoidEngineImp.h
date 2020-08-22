@@ -59,7 +59,11 @@ private:
 
 	void CreateGBufferRTV();
 	UINT GBufferSize() const;
-	void FillGBufferPass();
+	void DeferredDrawFillGBufferPass();
+	void DeferredDrawShadingPass();
+
+	void BuildZbufferRootSignature();
+	void BuildDeferredRootSignature();
 private:
 
 	std::vector<std::unique_ptr<FrameResource>> mFrameResources;
@@ -67,6 +71,7 @@ private:
 	int mCurrFrameResourceIndex = 0;
 
 	ComPtr<ID3D12RootSignature> mRootSignature = nullptr;
+	ComPtr<ID3D12RootSignature> m_deferred_gs_root_signature = nullptr;
 	ComPtr<ID3D12RootSignature> mSsaoRootSignature = nullptr;
 
 	ComPtr<ID3D12DescriptorHeap> mSrvDescriptorHeap = nullptr;
@@ -78,7 +83,6 @@ private:
 	std::unordered_map<std::string, ComPtr<ID3D12PipelineState>> mPSOs;
 
 	std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout;
-	std::vector<D3D12_INPUT_ELEMENT_DESC> mSkinnedInputLayout;
 
 	// List of all the render items.
 	std::vector<std::unique_ptr<RenderItem>> mAllRitems;

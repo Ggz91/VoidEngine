@@ -248,18 +248,16 @@ void CVoidEgine::DrawWithDeferredTexturing(const GameTimer& gt)
 
 	// A command list can be reset after it has been added to the command queue via ExecuteCommandList.
 	// Reusing the command list reuses memory.
-	ThrowIfFailed(mCommandList->Reset(cmdListAlloc.Get(), mPSOs["DeferredOpaque"].Get()));
-
-	ID3D12DescriptorHeap* descriptorHeaps[] = { mSrvDescriptorHeap.Get() };
-	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
-	mCommandList->SetGraphicsRootSignature(mRootSignature.Get());
-
-
+	ThrowIfFailed(mCommandList->Reset(cmdListAlloc.Get(), nullptr));
 	mCommandList->RSSetViewports(1, &mScreenViewport);
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
 
-	FillGBufferPass();
-	
+	ID3D12DescriptorHeap* descriptorHeaps[] = { mSrvDescriptorHeap.Get() };
+	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
+
+	DeferredDrawFillGBufferPass();
+	DeferredDrawShadingPass();
+
 	// Done recording commands.
 	ThrowIfFailed(mCommandList->Close());
 
@@ -490,42 +488,14 @@ void CVoidEgine::UpdateSsaoCB(const GameTimer& gt)
 
 void CVoidEgine::BuildRootSignature()
 {
-	// Root parameter can be a table, root descriptor or root constants.
-	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
-
-	CD3DX12_DESCRIPTOR_RANGE tex_table;
-	tex_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 48, 0, 0);
-
-	// Perfomance TIP: Order from most frequent to least frequent.
-	slotRootParameter[0].InitAsConstantBufferView(0);
-	slotRootParameter[1].InitAsConstantBufferView(1);
-	slotRootParameter[2].InitAsShaderResourceView(0, 1);
-	slotRootParameter[3].InitAsDescriptorTable(1, &tex_table, D3D12_SHADER_VISIBILITY_PIXEL);
-
-	auto staticSamplers = GetStaticSamplers();
-
-	// A root signature is an array of root parameters.
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter,
-		(UINT)staticSamplers.size(), staticSamplers.data(),
-		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
-
-	// create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
-	ComPtr<ID3DBlob> serializedRootSig = nullptr;
-	ComPtr<ID3DBlob> errorBlob = nullptr;
-	HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
-		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
-
-	if (errorBlob != nullptr)
+	if (m_use_deferred_texturing)
 	{
-		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+		BuildDeferredRootSignature();
 	}
-	ThrowIfFailed(hr);
-
-	ThrowIfFailed(md3dDevice->CreateRootSignature(
-		0,
-		serializedRootSig->GetBufferPointer(),
-		serializedRootSig->GetBufferSize(),
-		IID_PPV_ARGS(mRootSignature.GetAddressOf())));
+	else
+	{
+		BuildZbufferRootSignature();
+	}
 }
 
 void CVoidEgine::BuildDescriptorHeaps()
@@ -572,11 +542,17 @@ void CVoidEgine::BuildDescriptorHeaps()
 
 void CVoidEgine::BuildShadersAndInputLayout()
 {
-
-	mShaders["standardVS"] = d3dUtil::CompileShader(L".\\Shaders\\Default.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["opaquePS"] = d3dUtil::CompileShader(L".\\Shaders\\Default.hlsl", nullptr, "PS", "ps_5_1");
-	mShaders["DeferredVS"] = d3dUtil::CompileShader(L".\\Shaders\\Default.hlsl", nullptr, "DeferredVS", "vs_5_1");
-	mShaders["DeferredPS"] = d3dUtil::CompileShader(L".\\Shaders\\Default.hlsl", nullptr, "DeferredPS", "ps_5_1");
+	if (m_use_deferred_texturing)
+	{
+		mShaders["DeferredVS"] = d3dUtil::CompileShader(L".\\Shaders\\Default.hlsl", nullptr, "DeferredVS", "vs_5_1");
+		mShaders["DeferredPS"] = d3dUtil::CompileShader(L".\\Shaders\\Default.hlsl", nullptr, "DeferredPS", "ps_5_1");
+	}
+	else
+	{
+		mShaders["standardVS"] = d3dUtil::CompileShader(L".\\Shaders\\Default.hlsl", nullptr, "VS", "vs_5_1");
+		mShaders["opaquePS"] = d3dUtil::CompileShader(L".\\Shaders\\Default.hlsl", nullptr, "PS", "ps_5_1");
+	}
+	
 	mInputLayout =
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
@@ -585,67 +561,65 @@ void CVoidEgine::BuildShadersAndInputLayout()
 		{ "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 32, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 	};
 
-	mSkinnedInputLayout =
-	{
-		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 32, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "WEIGHTS", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 44, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "BONEINDICES", 0, DXGI_FORMAT_R8G8B8A8_UINT, 0, 56, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
-	};
 }
 
 
 void CVoidEgine::BuildPSOs()
 {
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaquePsoDesc;
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc;
 
 	//
 	// PSO for opaque objects.
 	//
-	ZeroMemory(&opaquePsoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
-	opaquePsoDesc.InputLayout = { mInputLayout.data(), (UINT)mInputLayout.size() };
-	opaquePsoDesc.pRootSignature = mRootSignature.Get();
-	opaquePsoDesc.VS =
+	ZeroMemory(&pso_desc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
+	pso_desc.InputLayout = { mInputLayout.data(), (UINT)mInputLayout.size() };
+	if (m_use_deferred_texturing)
 	{
-		reinterpret_cast<BYTE*>(mShaders["standardVS"]->GetBufferPointer()),
-		mShaders["standardVS"]->GetBufferSize()
-	};
-	opaquePsoDesc.PS =
+		pso_desc.pRootSignature = m_deferred_gs_root_signature.Get();
+		pso_desc.VS =
+		{
+			reinterpret_cast<BYTE*>(mShaders["DeferredVS"]->GetBufferPointer()),
+			mShaders["DeferredVS"]->GetBufferSize()
+		};
+		pso_desc.PS =
+		{
+			reinterpret_cast<BYTE*>(mShaders["DeferredPS"]->GetBufferPointer()),
+			mShaders["DeferredPS"]->GetBufferSize()
+		};
+		pso_desc.NumRenderTargets = 2;
+		pso_desc.RTVFormats[0] = mBackBufferFormat;
+		pso_desc.RTVFormats[1] = DXGI_FORMAT_R32_UINT;
+	}
+	else
 	{
-		reinterpret_cast<BYTE*>(mShaders["opaquePS"]->GetBufferPointer()),
-		mShaders["opaquePS"]->GetBufferSize()
-	};
-	opaquePsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-	opaquePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-	opaquePsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-	opaquePsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-	opaquePsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-	opaquePsoDesc.SampleMask = UINT_MAX;
-	opaquePsoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-	opaquePsoDesc.NumRenderTargets = 1;
-	opaquePsoDesc.RTVFormats[0] = mBackBufferFormat;
-	opaquePsoDesc.SampleDesc.Count = m4xMsaaState ? 4 : 1;
-	opaquePsoDesc.SampleDesc.Quality = m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
-	opaquePsoDesc.DSVFormat = mDepthStencilFormat;
-	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&mPSOs["opaque"])));
-
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC deferred_pso_desc = opaquePsoDesc;
-	deferred_pso_desc.VS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["DeferredVS"]->GetBufferPointer()),
-		mShaders["DeferredVS"]->GetBufferSize()
-	};
-	deferred_pso_desc.PS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["DeferredPS"]->GetBufferPointer()),
-		mShaders["DeferredPS"]->GetBufferSize()
-	}; 
-	deferred_pso_desc.NumRenderTargets = 2;
-	deferred_pso_desc.RTVFormats[0] = mBackBufferFormat;
-	deferred_pso_desc.RTVFormats[1] = DXGI_FORMAT_R32_UINT;
-	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&deferred_pso_desc, IID_PPV_ARGS(&mPSOs["DeferredOpaque"])));
+		pso_desc.pRootSignature = mRootSignature.Get();
+		pso_desc.VS =
+		{
+			reinterpret_cast<BYTE*>(mShaders["standardVS"]->GetBufferPointer()),
+			mShaders["standardVS"]->GetBufferSize()
+		};
+		pso_desc.PS =
+		{
+			reinterpret_cast<BYTE*>(mShaders["opaquePS"]->GetBufferPointer()),
+			mShaders["opaquePS"]->GetBufferSize()
+		};
+		pso_desc.NumRenderTargets = 1;
+		pso_desc.RTVFormats[0] = mBackBufferFormat;
+	}
+	
+	pso_desc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	pso_desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+	pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+	pso_desc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	pso_desc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+	pso_desc.SampleMask = UINT_MAX;
+	pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	
+	pso_desc.SampleDesc.Count = m4xMsaaState ? 4 : 1;
+	pso_desc.SampleDesc.Quality = m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
+	pso_desc.DSVFormat = mDepthStencilFormat;
+	std::string pso_name = m_use_deferred_texturing ? "DeferredGS" : "opaque";
+	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&mPSOs[pso_name])));
 }
 
 void CVoidEgine::BuildFrameResources()
@@ -958,9 +932,11 @@ UINT CVoidEgine::GBufferSize() const
 	return sizeof(m_g_buffer) / sizeof(m_g_buffer[0]);
 }
 
-void CVoidEgine::FillGBufferPass()
+void CVoidEgine::DeferredDrawFillGBufferPass()
 {
 	//第一个pass，先填充G-Buffers
+	mCommandList->SetGraphicsRootSignature(m_deferred_gs_root_signature.Get());
+
 	for (int i = 0; i < GBufferSize(); ++i)
 	{
 		mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer[i].Get(),
@@ -991,18 +967,10 @@ void CVoidEgine::FillGBufferPass()
 	auto passCB = mCurrFrameResource->PassCB->Resource();
 	mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress());
 
-	mCommandList->SetPipelineState(mPSOs["DeferredOpaque"].Get());
+	mCommandList->SetPipelineState(mPSOs["DeferredGS"].Get());
 	// Bind all the materials used in this scene.  For structured buffers, we can bypass the heap and 
 	// set as a root descriptor.
-// 	if (NULL != mCurrFrameResource->MaterialBuffer)
-// 	{
-// 		auto matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
-// 		mCommandList->SetGraphicsRootShaderResourceView(2, matBuffer->GetGPUVirtualAddress());
-// 	}
-// 	if (0 != mTextures.size())
-// 	{
-// 		mCommandList->SetGraphicsRootDescriptorTable(3, mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-// 	}
+
 	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
 
 	for (int i = 0; i < GBufferSize(); ++i)
@@ -1019,5 +987,95 @@ void CVoidEgine::FillGBufferPass()
 		D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer[0].Get(),
 		D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON));
+}
+
+void CVoidEgine::DeferredDrawShadingPass()
+{
+// 	if (NULL != mCurrFrameResource->MaterialBuffer)
+// 	{
+// 		auto matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
+// 		mCommandList->SetGraphicsRootShaderResourceView(2, matBuffer->GetGPUVirtualAddress());
+// 	}
+// 	if (0 != mTextures.size())
+// 	{
+// 		mCommandList->SetGraphicsRootDescriptorTable(3, mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+// 	}
+
+
+}
+
+void CVoidEgine::BuildZbufferRootSignature()
+{
+	// Root parameter can be a table, root descriptor or root constants.
+	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
+
+	CD3DX12_DESCRIPTOR_RANGE tex_table;
+	tex_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 48, 0, 0);
+
+	// Perfomance TIP: Order from most frequent to least frequent.
+	slotRootParameter[0].InitAsConstantBufferView(0);
+	slotRootParameter[1].InitAsConstantBufferView(1);
+	slotRootParameter[2].InitAsShaderResourceView(0, 1);
+	slotRootParameter[3].InitAsDescriptorTable(1, &tex_table, D3D12_SHADER_VISIBILITY_PIXEL);
+
+	auto staticSamplers = GetStaticSamplers();
+
+	// A root signature is an array of root parameters.
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter,
+		(UINT)staticSamplers.size(), staticSamplers.data(),
+		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+	// create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
+	ComPtr<ID3DBlob> serializedRootSig = nullptr;
+	ComPtr<ID3DBlob> errorBlob = nullptr;
+	HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
+
+	if (errorBlob != nullptr)
+	{
+		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+	}
+	ThrowIfFailed(hr);
+
+	ThrowIfFailed(md3dDevice->CreateRootSignature(
+		0,
+		serializedRootSig->GetBufferPointer(),
+		serializedRootSig->GetBufferSize(),
+		IID_PPV_ARGS(mRootSignature.GetAddressOf())));
+}
+
+void CVoidEgine::BuildDeferredRootSignature()
+{
+	// Root parameter can be a table, root descriptor or root constants.
+	CD3DX12_ROOT_PARAMETER slotRootParameter[2];
+
+	// Perfomance TIP: Order from most frequent to least frequent.
+	slotRootParameter[0].InitAsConstantBufferView(0);
+	slotRootParameter[1].InitAsConstantBufferView(1);
+
+	auto staticSamplers = GetStaticSamplers();
+
+	// A root signature is an array of root parameters.
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(2, slotRootParameter,
+		(UINT)staticSamplers.size(), staticSamplers.data(),
+		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+	// create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
+	ComPtr<ID3DBlob> serializedRootSig = nullptr;
+	ComPtr<ID3DBlob> errorBlob = nullptr;
+	HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
+
+	if (errorBlob != nullptr)
+	{
+		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+	}
+	ThrowIfFailed(hr);
+
+	ThrowIfFailed(md3dDevice->CreateRootSignature(
+		0,
+		serializedRootSig->GetBufferPointer(),
+		serializedRootSig->GetBufferSize(),
+		IID_PPV_ARGS(m_deferred_gs_root_signature.GetAddressOf())));
 }
 
