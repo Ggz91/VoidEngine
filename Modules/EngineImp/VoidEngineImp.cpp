@@ -258,65 +258,8 @@ void CVoidEgine::DrawWithDeferredTexturing(const GameTimer& gt)
 	mCommandList->RSSetViewports(1, &mScreenViewport);
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
 
-	//第一个pass，先填充G-Buffers
-	for (int i=0; i<GBufferSize(); ++i)
-	{
-		mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer[i].Get(),
-			D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
-	}
+	FillGBufferPass();
 	
-
-	// Clear the back buffer and depth buffer.
-	
-	for (int i = 0; i < GBufferSize(); ++i)
-	{
-		auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(),
-			SwapChainBufferCount+i,
-			mRtvDescriptorSize);
-		mCommandList->ClearRenderTargetView(handle, Colors::LightSteelBlue, 0, nullptr);
-	}
-	mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
-
-	CD3DX12_CPU_DESCRIPTOR_HANDLE g_buffer_handle(mRtvHeap->GetCPUDescriptorHandleForHeapStart(),
-		SwapChainBufferCount,
-		mRtvDescriptorSize);
-	// Specify the buffers we are going to render to.
-	mCommandList->OMSetRenderTargets(GBufferSize(), 
-		&g_buffer_handle, 
-		true, 
-		&DepthStencilView());
-
-	auto passCB = mCurrFrameResource->PassCB->Resource();
-	mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress());
-
-	mCommandList->SetPipelineState(mPSOs["DeferredOpaque"].Get());
-	// Bind all the materials used in this scene.  For structured buffers, we can bypass the heap and 
-	// set as a root descriptor.
-	if (NULL != mCurrFrameResource->MaterialBuffer)
-	{
-		auto matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
-		mCommandList->SetGraphicsRootShaderResourceView(2, matBuffer->GetGPUVirtualAddress());
-	}
-	if (0 != mTextures.size())
-	{
-		mCommandList->SetGraphicsRootDescriptorTable(3, mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-	}
-	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
-
-	for (int i=0; i<GBufferSize(); ++i)
-	{
-		mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer[i].Get(),
-			D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COMMON));
-	}
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
-		D3D12_RESOURCE_STATE_PRESENT,D3D12_RESOURCE_STATE_COPY_DEST ));
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer[0].Get(),
-		D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE));
-	mCommandList->CopyResource(CurrentBackBuffer(), m_g_buffer[0].Get());
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
-		D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer[0].Get(),
-		D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON));
 	// Done recording commands.
 	ThrowIfFailed(mCommandList->Close());
 
@@ -616,7 +559,7 @@ void CVoidEgine::BuildDescriptorHeaps()
 	{
 		D3D12_SHADER_RESOURCE_VIEW_DESC gbuffer_srv_desc = {};
 		gbuffer_srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		gbuffer_srv_desc.Format = mBackBufferFormat;
+		gbuffer_srv_desc.Format = m_g_buffer_format[i];
 		gbuffer_srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 		gbuffer_srv_desc.Texture2D.MipLevels = 1;
 		gbuffer_srv_desc.Texture2D.MostDetailedMip = 0;
@@ -630,10 +573,10 @@ void CVoidEgine::BuildDescriptorHeaps()
 void CVoidEgine::BuildShadersAndInputLayout()
 {
 
-	mShaders["standardVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Default.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["opaquePS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Default.hlsl", nullptr, "PS", "ps_5_1");
-	mShaders["DeferredVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Default.hlsl", nullptr, "DeferredVS", "vs_5_1");
-	mShaders["DeferredPS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Default.hlsl", nullptr, "DeferredPS", "ps_5_1");
+	mShaders["standardVS"] = d3dUtil::CompileShader(L".\\Shaders\\Default.hlsl", nullptr, "VS", "vs_5_1");
+	mShaders["opaquePS"] = d3dUtil::CompileShader(L".\\Shaders\\Default.hlsl", nullptr, "PS", "ps_5_1");
+	mShaders["DeferredVS"] = d3dUtil::CompileShader(L".\\Shaders\\Default.hlsl", nullptr, "DeferredVS", "vs_5_1");
+	mShaders["DeferredPS"] = d3dUtil::CompileShader(L".\\Shaders\\Default.hlsl", nullptr, "DeferredPS", "ps_5_1");
 	mInputLayout =
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
@@ -701,7 +644,7 @@ void CVoidEgine::BuildPSOs()
 	}; 
 	deferred_pso_desc.NumRenderTargets = 2;
 	deferred_pso_desc.RTVFormats[0] = mBackBufferFormat;
-	deferred_pso_desc.RTVFormats[1] = mBackBufferFormat;
+	deferred_pso_desc.RTVFormats[1] = DXGI_FORMAT_R32_UINT;
 	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&deferred_pso_desc, IID_PPV_ARGS(&mPSOs["DeferredOpaque"])));
 }
 
@@ -975,6 +918,9 @@ std::array<const CD3DX12_STATIC_SAMPLER_DESC, 7> CVoidEgine::GetStaticSamplers()
 
 void CVoidEgine::CreateGBufferRTV()
 {
+	m_g_buffer_format[0] = mBackBufferFormat;
+	m_g_buffer_format[1] = DXGI_FORMAT_R32_UINT;
+
 	for (int i=0; i<GBufferSize(); ++i)
 	{
 		D3D12_RESOURCE_DESC tex_desc;
@@ -984,12 +930,12 @@ void CVoidEgine::CreateGBufferRTV()
 		tex_desc.Height = mClientHeight;
 		tex_desc.DepthOrArraySize = 1;
 		tex_desc.MipLevels = 1;
-		tex_desc.Format = mBackBufferFormat;
+		tex_desc.Format = m_g_buffer_format[i];
 		tex_desc.SampleDesc.Count = 1;
 		tex_desc.SampleDesc.Quality = 0;
 		tex_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 		tex_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-		auto clear_values = CD3DX12_CLEAR_VALUE(mBackBufferFormat, Colors::LightSteelBlue);
+		auto clear_values = CD3DX12_CLEAR_VALUE(m_g_buffer_format[i], Colors::LightSteelBlue);
 		ThrowIfFailed(md3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
 			D3D12_HEAP_FLAG_NONE,
 			&tex_desc,
@@ -998,7 +944,7 @@ void CVoidEgine::CreateGBufferRTV()
 			IID_PPV_ARGS(&m_g_buffer[i])));
 
 		D3D12_RENDER_TARGET_VIEW_DESC rt_desc;
-		rt_desc.Format = mBackBufferFormat;
+		rt_desc.Format = m_g_buffer_format[i];
 		rt_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
 		rt_desc.Texture2D.MipSlice = 0;
 		rt_desc.Texture2D.PlaneSlice = 0;
@@ -1010,5 +956,68 @@ void CVoidEgine::CreateGBufferRTV()
 UINT CVoidEgine::GBufferSize() const
 {
 	return sizeof(m_g_buffer) / sizeof(m_g_buffer[0]);
+}
+
+void CVoidEgine::FillGBufferPass()
+{
+	//第一个pass，先填充G-Buffers
+	for (int i = 0; i < GBufferSize(); ++i)
+	{
+		mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer[i].Get(),
+			D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+	}
+
+
+	// Clear the back buffer and depth buffer.
+
+	for (int i = 0; i < GBufferSize(); ++i)
+	{
+		auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(),
+			SwapChainBufferCount + i,
+			mRtvDescriptorSize);
+		mCommandList->ClearRenderTargetView(handle, Colors::LightSteelBlue, 0, nullptr);
+	}
+	mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE g_buffer_handle(mRtvHeap->GetCPUDescriptorHandleForHeapStart(),
+		SwapChainBufferCount,
+		mRtvDescriptorSize);
+	// Specify the buffers we are going to render to.
+	mCommandList->OMSetRenderTargets(GBufferSize(),
+		&g_buffer_handle,
+		true,
+		&DepthStencilView());
+
+	auto passCB = mCurrFrameResource->PassCB->Resource();
+	mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress());
+
+	mCommandList->SetPipelineState(mPSOs["DeferredOpaque"].Get());
+	// Bind all the materials used in this scene.  For structured buffers, we can bypass the heap and 
+	// set as a root descriptor.
+// 	if (NULL != mCurrFrameResource->MaterialBuffer)
+// 	{
+// 		auto matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
+// 		mCommandList->SetGraphicsRootShaderResourceView(2, matBuffer->GetGPUVirtualAddress());
+// 	}
+// 	if (0 != mTextures.size())
+// 	{
+// 		mCommandList->SetGraphicsRootDescriptorTable(3, mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+// 	}
+	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
+
+	for (int i = 0; i < GBufferSize(); ++i)
+	{
+		mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer[i].Get(),
+			D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COMMON));
+	}
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
+		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST));
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer[0].Get(),
+		D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE));
+	mCommandList->CopyResource(CurrentBackBuffer(), m_g_buffer[0].Get());
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
+		D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer[0].Get(),
+		D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON));
 }
 

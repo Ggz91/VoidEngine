@@ -11,10 +11,7 @@ using Microsoft::WRL::ComPtr;
 using namespace DirectX;
 using namespace DirectX::PackedVector;
 
-
-
-
-
+const int gGbufferCount = 2;
 class CVoidEgine : public CBaseEngine
 {
 public:
@@ -62,6 +59,7 @@ private:
 
 	void CreateGBufferRTV();
 	UINT GBufferSize() const;
+	void FillGBufferPass();
 private:
 
 	std::vector<std::unique_ptr<FrameResource>> mFrameResources;
@@ -126,5 +124,6 @@ private:
 	};
 	XMFLOAT3 mRotatedLightDirections[3];
 
-	Microsoft::WRL::ComPtr<ID3D12Resource> m_g_buffer[2];
+	Microsoft::WRL::ComPtr<ID3D12Resource> m_g_buffer[gGbufferCount];
+	DXGI_FORMAT m_g_buffer_format[gGbufferCount];
 };
