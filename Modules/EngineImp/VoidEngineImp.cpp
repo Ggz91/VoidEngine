@@ -258,6 +258,7 @@ void CVoidEgine::DrawWithDeferredTexturing(const GameTimer& gt)
 	mCommandList->RSSetViewports(1, &mScreenViewport);
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
 
+	//第一个pass，先填充G-Buffers
 	for (int i=0; i<GBufferSize(); ++i)
 	{
 		mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer[i].Get(),
