@@ -543,10 +543,10 @@ void CVoidEgine::BuildShadersAndInputLayout()
 {
 	if (m_use_deferred_texturing)
 	{
-		mShaders["DeferredVS"] = d3dUtil::CompileShader(L".\\Shaders\\DeferredGSShader.hlsl", nullptr, "DeferredGSVS", "vs_5_1");
-		mShaders["DeferredPS"] = d3dUtil::CompileShader(L".\\Shaders\\DeferredGSShader.hlsl", nullptr, "DeferredGSPS", "ps_5_1");
-		mShaders["DeferredVS"] = d3dUtil::CompileShader(L".\\Shaders\\DeferredCSShader.hlsl", nullptr, "ShadingVS", "vs_5_1");
-		mShaders["DeferredPS"] = d3dUtil::CompileShader(L".\\Shaders\\DeferredCSShader.hlsl", nullptr, "ShadingPS", "ps_5_1");
+		mShaders["DeferredGSVS"] = d3dUtil::CompileShader(L".\\Shaders\\DeferredGSShader.hlsl", nullptr, "DeferredGSVS", "vs_5_1");
+		mShaders["DeferredGSPS"] = d3dUtil::CompileShader(L".\\Shaders\\DeferredGSShader.hlsl", nullptr, "DeferredGSPS", "ps_5_1");
+		mShaders["DeferredShadingVS"] = d3dUtil::CompileShader(L".\\Shaders\\DeferredShadingShader.hlsl", nullptr, "ShadingVS", "vs_5_1");
+		mShaders["DeferredShadingPS"] = d3dUtil::CompileShader(L".\\Shaders\\DeferredShadingShader.hlsl", nullptr, "ShadingPS", "ps_5_1");
 	}
 	else
 	{
@@ -619,13 +619,13 @@ void CVoidEgine::BuildDeferredPSO()
 	gs_pso_desc.pRootSignature = m_deferred_gs_root_signature.Get();
 	gs_pso_desc.VS =
 	{
-		reinterpret_cast<BYTE*>(mShaders["DeferredVS"]->GetBufferPointer()),
-		mShaders["DeferredVS"]->GetBufferSize()
+		reinterpret_cast<BYTE*>(mShaders["DeferredGSVS"]->GetBufferPointer()),
+		mShaders["DeferredGSVS"]->GetBufferSize()
 	};
 	gs_pso_desc.PS =
 	{
-		reinterpret_cast<BYTE*>(mShaders["DeferredPS"]->GetBufferPointer()),
-		mShaders["DeferredPS"]->GetBufferSize()
+		reinterpret_cast<BYTE*>(mShaders["DeferredGSPS"]->GetBufferPointer()),
+		mShaders["DeferredGSPS"]->GetBufferSize()
 	};
 	gs_pso_desc.NumRenderTargets = 2;
 	gs_pso_desc.RTVFormats[0] = mBackBufferFormat;
@@ -636,6 +636,8 @@ void CVoidEgine::BuildDeferredPSO()
 	gs_pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 	gs_pso_desc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 	gs_pso_desc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+	gs_pso_desc.DepthStencilState.StencilEnable = true;
+	gs_pso_desc.DepthStencilState.FrontFace.StencilPassOp = D3D12_STENCIL_OP_REPLACE;
 	gs_pso_desc.SampleMask = UINT_MAX;
 	gs_pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 
@@ -648,17 +650,21 @@ void CVoidEgine::BuildDeferredPSO()
 	shading_pso_desc.pRootSignature = m_deferred_shading_root_signature.Get();
 	shading_pso_desc.VS =
 	{
-		reinterpret_cast<BYTE*>(mShaders["DeferredVS"]->GetBufferPointer()),
-		mShaders["DeferredVS"]->GetBufferSize()
+		reinterpret_cast<BYTE*>(mShaders["DeferredShadingVS"]->GetBufferPointer()),
+		mShaders["DeferredShadingVS"]->GetBufferSize()
 	};
 	shading_pso_desc.PS =
 	{
-		reinterpret_cast<BYTE*>(mShaders["DeferredPS"]->GetBufferPointer()),
-		mShaders["DeferredPS"]->GetBufferSize()
+		reinterpret_cast<BYTE*>(mShaders["DeferredShadingPS"]->GetBufferPointer()),
+		mShaders["DeferredShadingPS"]->GetBufferSize()
 	};
 	shading_pso_desc.DepthStencilState.DepthEnable = false;
 	shading_pso_desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
 	shading_pso_desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+	shading_pso_desc.DepthStencilState.StencilEnable = true;
+	shading_pso_desc.DepthStencilState.StencilWriteMask = 0x0;
+	shading_pso_desc.DepthStencilState.StencilReadMask = 0xFF;
+	shading_pso_desc.DepthStencilState.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_EQUAL;
 	shading_pso_desc.NumRenderTargets = 1;
 	shading_pso_desc.RTVFormats[0] = mBackBufferFormat;
 	shading_pso_desc.RTVFormats[1] = DXGI_FORMAT_UNKNOWN;
@@ -976,9 +982,7 @@ void CVoidEgine::DeferredDrawFillGBufferPass()
 			D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RENDER_TARGET));
 	}
 
-
 	// Clear the back buffer and depth buffer.
-
 	for (int i = 0; i < GBufferSize(); ++i)
 	{
 		auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(),
@@ -996,7 +1000,7 @@ void CVoidEgine::DeferredDrawFillGBufferPass()
 		&g_buffer_handle,
 		true,
 		&DepthStencilView());
-
+	mCommandList->OMSetStencilRef(1);
 	auto passCB = mCurrFrameResource->PassCB->Resource();
 	mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress());
 
@@ -1041,6 +1045,7 @@ void CVoidEgine::DeferredDrawShadingPass()
 	{
 		mCommandList->SetGraphicsRootDescriptorTable(3, mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 	}
+	mCommandList->OMSetStencilRef(1);
 	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
 	mCommandList->IASetVertexBuffers(0, 1, nullptr);
 	mCommandList->IASetIndexBuffer(nullptr);
