@@ -930,23 +930,11 @@ void CVoidEgine::CreateGBufferRTV()
 
 	for (int i=0; i<GBufferSize(); ++i)
 	{
-		D3D12_RESOURCE_DESC tex_desc;
-		tex_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-		tex_desc.Alignment = 0;
-		tex_desc.Width = mClientWidth;
-		tex_desc.Height = mClientHeight;
-		tex_desc.DepthOrArraySize = 1;
-		tex_desc.MipLevels = 1;
-		tex_desc.Format = m_g_buffer_format[i];
-		tex_desc.SampleDesc.Count = 1;
-		tex_desc.SampleDesc.Quality = 0;
-		tex_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-		tex_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 		auto clear_values = CD3DX12_CLEAR_VALUE(m_g_buffer_format[i], Colors::LightSteelBlue);
 		ThrowIfFailed(md3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
 			D3D12_HEAP_FLAG_NONE,
-			&tex_desc,
-			D3D12_RESOURCE_STATE_COMMON,
+			&CD3DX12_RESOURCE_DESC::Tex2D(m_g_buffer_format[i], mClientWidth, mClientHeight, 1, 0, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET),
+			D3D12_RESOURCE_STATE_GENERIC_READ,
 			&clear_values,
 			IID_PPV_ARGS(&m_g_buffer[i])));
 
@@ -973,7 +961,7 @@ void CVoidEgine::DeferredDrawFillGBufferPass()
 	for (int i = 0; i < GBufferSize(); ++i)
 	{
 		mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer[i].Get(),
-			D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+			D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET));
 	}
 
 
@@ -1011,26 +999,26 @@ void CVoidEgine::DeferredDrawFillGBufferPass()
 		mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer[i].Get(),
 			D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ));
 	}
-// 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
-// 		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST));
-// 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer[0].Get(),
-// 		D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE));
-// 	mCommandList->CopyResource(CurrentBackBuffer(), m_g_buffer[0].Get());
-// 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
-// 		D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
-// 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer[0].Get(),
-// 		D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON));
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
+		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST));
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer[0].Get(),
+		D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_COPY_SOURCE));
+	mCommandList->CopyResource(CurrentBackBuffer(), m_g_buffer[0].Get());
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
+		D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer[0].Get(),
+		D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_GENERIC_READ));
 }
 
 void CVoidEgine::DeferredDrawShadingPass()
 {
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
-		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+	return;
+	//mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
 
 	mCommandList->SetComputeRootSignature(m_deferred_shading_root_signature.Get());
 	mCommandList->SetPipelineState(mPSOs["DeferredCS"].Get());
-	mCommandList->SetComputeRootShaderResourceView(0, m_g_buffer[0]->GetGPUVirtualAddress());
-	mCommandList->SetComputeRootShaderResourceView(1, m_g_buffer[1]->GetGPUVirtualAddress());
+	mCommandList->SetComputeRootShaderResourceView(0, m_g_buffer[0].Get()->GetGPUVirtualAddress());
+	mCommandList->SetComputeRootShaderResourceView(1, m_g_buffer[1].Get()->GetGPUVirtualAddress());
 	if (NULL != mCurrFrameResource->MaterialBuffer)
 	{
 		auto matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
@@ -1045,8 +1033,7 @@ void CVoidEgine::DeferredDrawShadingPass()
 		mCurrBackBuffer,
 		mRtvDescriptorSize));
 	mCommandList->Dispatch(16, 16, 1);
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
-		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,D3D12_RESOURCE_STATE_PRESENT));
+	//mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER,D3D12_RESOURCE_STATE_PRESENT));
 }
 
 void CVoidEgine::BuildZbufferRootSignature()
@@ -1145,7 +1132,7 @@ void CVoidEgine::BuildDeferredShadingRootSignature()
 	slotRootParameter[0].InitAsShaderResourceView(0);
 	slotRootParameter[1].InitAsShaderResourceView(1);
 	slotRootParameter[2].InitAsShaderResourceView(0, 1);
-	slotRootParameter[3].InitAsDescriptorTable(1, &tex_table, D3D12_SHADER_VISIBILITY_PIXEL);
+	slotRootParameter[3].InitAsDescriptorTable(1, &tex_table, D3D12_SHADER_VISIBILITY_ALL);
 	slotRootParameter[4].InitAsDescriptorTable(1, &uav_table);
 
 	auto staticSamplers = GetStaticSamplers();
