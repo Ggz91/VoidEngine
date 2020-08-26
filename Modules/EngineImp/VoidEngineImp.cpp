@@ -628,7 +628,7 @@ void CVoidEgine::BuildDeferredPSO()
 		mShaders["DeferredGSPS"]->GetBufferSize()
 	};
 	gs_pso_desc.NumRenderTargets = 2;
-	gs_pso_desc.RTVFormats[0] = mBackBufferFormat;
+	gs_pso_desc.RTVFormats[0] = DXGI_FORMAT_R32G32B32A32_UINT;
 	gs_pso_desc.RTVFormats[1] = DXGI_FORMAT_R32_UINT;
 
 	gs_pso_desc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
@@ -943,7 +943,7 @@ std::array<const CD3DX12_STATIC_SAMPLER_DESC, 7> CVoidEgine::GetStaticSamplers()
 
 void CVoidEgine::CreateGBufferRTV()
 {
-	m_g_buffer_format[0] = mBackBufferFormat;
+	m_g_buffer_format[0] = DXGI_FORMAT_R32G32B32A32_UINT;
 	m_g_buffer_format[1] = DXGI_FORMAT_R32_UINT;
 
 	for (int i=0; i<GBufferSize(); ++i)
@@ -1033,17 +1033,18 @@ void CVoidEgine::DeferredDrawShadingPass()
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
 	mCommandList->SetGraphicsRootSignature(m_deferred_shading_root_signature.Get());
 	mCommandList->SetPipelineState(mPSOs["DeferredShading"].Get());
-	CD3DX12_GPU_DESCRIPTOR_HANDLE hDescriptor(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-	mCommandList->SetGraphicsRootDescriptorTable(0, hDescriptor.Offset(mTextures.size(), mCbvSrvUavDescriptorSize));
-	mCommandList->SetGraphicsRootDescriptorTable(1, hDescriptor.Offset(1, mCbvSrvUavDescriptorSize));
+	mCommandList->SetGraphicsRootConstantBufferView(0, mCurrFrameResource->PassCB->Resource()->GetGPUVirtualAddress());
+	CD3DX12_GPU_DESCRIPTOR_HANDLE h_des(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	mCommandList->SetGraphicsRootDescriptorTable(1, h_des.Offset(mTextures.size(), mCbvSrvUavDescriptorSize));
+	mCommandList->SetGraphicsRootDescriptorTable(2, h_des.Offset(1, mCbvSrvUavDescriptorSize));
 	if (NULL != mCurrFrameResource->MaterialBuffer)
 	{
 		auto matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
-		mCommandList->SetGraphicsRootShaderResourceView(2, matBuffer->GetGPUVirtualAddress());
+		mCommandList->SetGraphicsRootShaderResourceView(3, matBuffer->GetGPUVirtualAddress());
 	}
 	if (0 != mTextures.size())
 	{
-		mCommandList->SetGraphicsRootDescriptorTable(3, mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+		mCommandList->SetGraphicsRootDescriptorTable(4, mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 	}
 	mCommandList->OMSetStencilRef(1);
 	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
@@ -1140,7 +1141,7 @@ void CVoidEgine::BuildDeferredGSRootSignature()
 void CVoidEgine::BuildDeferredShadingRootSignature()
 {
 	// Root parameter can be a table, root descriptor or root constants.
-	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
+	CD3DX12_ROOT_PARAMETER slotRootParameter[5];
 
 	CD3DX12_DESCRIPTOR_RANGE gbuffer0_table;
 	gbuffer0_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
@@ -1149,19 +1150,20 @@ void CVoidEgine::BuildDeferredShadingRootSignature()
 	gbuffer1_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
 
 	CD3DX12_DESCRIPTOR_RANGE tex_table;
-	tex_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, mTextures.size(), 1, 1);
+	tex_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, mTextures.size(), 2, 1);
 
 
 	// Perfomance TIP: Order from most frequent to least frequent.
-	slotRootParameter[0].InitAsDescriptorTable(1, &gbuffer0_table);
-	slotRootParameter[1].InitAsDescriptorTable(1, &gbuffer1_table);
-	slotRootParameter[2].InitAsShaderResourceView(0, 1);
-	slotRootParameter[3].InitAsDescriptorTable(1, &tex_table, D3D12_SHADER_VISIBILITY_ALL);
+	slotRootParameter[0].InitAsConstantBufferView(1);
+	slotRootParameter[1].InitAsDescriptorTable(1, &gbuffer0_table);
+	slotRootParameter[2].InitAsDescriptorTable(1, &gbuffer1_table);
+	slotRootParameter[3].InitAsShaderResourceView(0, 1);
+	slotRootParameter[4].InitAsDescriptorTable(1, &tex_table, D3D12_SHADER_VISIBILITY_ALL);
 
 	auto staticSamplers = GetStaticSamplers();
 
 	// A root signature is an array of root parameters.
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter,
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(5, slotRootParameter,
 		(UINT)staticSamplers.size(), staticSamplers.data(),
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
