@@ -525,6 +525,8 @@ void CVoidEgine::BuildDescriptorHeaps()
 		itr++;
 	}
 
+	
+
 	for (int i=0; i<GBufferSize(); ++i)
 	{
 		D3D12_SHADER_RESOURCE_VIEW_DESC gbuffer_srv_desc = {};
