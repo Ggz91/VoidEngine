@@ -2,6 +2,9 @@
 #include <iostream>
 #include "../../VoidEngineInterface.h"
 #include "../EngineImp/EngineImp.h"
+
+//#define __ZBuffer_Rendering 1
+
 class IEngine;
 
 class CEngineWrapper : public IEngineWrapper
