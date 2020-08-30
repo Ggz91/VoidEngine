@@ -99,9 +99,6 @@
     <ClInclude Include="Modules\RenderItemUtil\RenderItemUtil.h">
       <Filter>RenderItemFillUtil</Filter>
     </ClInclude>
-    <ClInclude Include="Modules\EngineImp\VoidEngineImpInterface.h">
-      <Filter>EngineImp</Filter>
-    </ClInclude>
     <ClInclude Include="Modules\EngineImp\CBaseRenderPipeline.h">
       <Filter>EngineImp</Filter>
     </ClInclude>
@@ -109,6 +106,12 @@
       <Filter>EngineImp</Filter>
     </ClInclude>
     <ClInclude Include="Modules\EngineImp\ZBufferRenderPipeline.h">
+      <Filter>EngineImp</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\EngineImp\EngineInterface.h">
+      <Filter>EngineImp</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\EngineImp\EngineImp.h">
       <Filter>EngineImp</Filter>
     </ClInclude>
   </ItemGroup>
@@ -165,6 +168,9 @@
       <Filter>EngineImp</Filter>
     </ClCompile>
     <ClCompile Include="Modules\EngineImp\ZBufferRenderPipeline.cpp">
+      <Filter>EngineImp</Filter>
+    </ClCompile>
+    <ClCompile Include="Modules\EngineImp\EngineImp.cpp">
       <Filter>EngineImp</Filter>
     </ClCompile>
   </ItemGroup>

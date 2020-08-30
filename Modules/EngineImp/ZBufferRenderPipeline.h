@@ -11,7 +11,6 @@ using Microsoft::WRL::ComPtr;
 using namespace DirectX;
 using namespace DirectX::PackedVector;
 
-const int gGbufferCount = 2;
 class CZBufferRenderPipeline : public CBaseRenderPipeline
 {
 public:
@@ -29,7 +28,6 @@ private:
 	virtual void Draw(const GameTimer& gt)override;
 
 	void DrawWithZBuffer(const GameTimer& gt);
-	void DrawWithDeferredTexturing(const GameTimer& gt);
 
 	void UpdateObjectCBs(const GameTimer& gt);
 	void UpdateMaterialBuffer(const GameTimer& gt);

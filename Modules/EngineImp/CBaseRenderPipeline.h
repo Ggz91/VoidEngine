@@ -18,7 +18,7 @@
 #pragma comment(lib, "dxgi.lib")
 
 
-class IEngine
+class IRenderPipeline
 {
 public:
 	virtual bool Initialize() = 0;
@@ -30,7 +30,7 @@ public:
 	virtual void Debug() = 0;
 };
 
-class CBaseRenderPipeline : public IEngine
+class CBaseRenderPipeline : public IRenderPipeline
 {
 protected:
 

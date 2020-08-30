@@ -1,9 +1,18 @@
 #include "EngineWrapperImp.h"
 #include "../EngineImp/DeferredRenderPipeline.h"
+#include "../EngineImp/ZBufferRenderPipeline.h"
 
-CEngineWrapper::CEngineWrapper(HINSTANCE h_instance, HWND h_wnd) : m_ptr_engine(std::make_unique<CDeferredRenderPipeline>(h_instance, h_wnd))
+CEngineWrapper::CEngineWrapper(HINSTANCE h_instance, HWND h_wnd) 
 {
-
+	EngineInitParam param;
+	param.HInstance = h_instance;
+	param.HWnd = h_wnd;
+#ifdef __ZBuffer_Rendering
+	param.UseDeferredRendering = false;
+#else
+	param.UseDeferredRendering = true;
+#endif
+	m_ptr_engine = std::make_unique<CEngine>(param);
 }
 
 CEngineWrapper::~CEngineWrapper()

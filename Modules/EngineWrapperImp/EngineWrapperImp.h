@@ -1,7 +1,7 @@
 #pragma once
 #include <iostream>
 #include "../../VoidEngineInterface.h"
-
+#include "../EngineImp/EngineImp.h"
 class IEngine;
 
 class CEngineWrapper : public IEngineWrapper
