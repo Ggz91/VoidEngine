@@ -1,7 +1,7 @@
 #include "EngineWrapperImp.h"
-#include "../EngineImp/VoidEngineImp.h"
+#include "../EngineImp/DeferredRenderPipeline.h"
 
-CEngineWrapper::CEngineWrapper(HINSTANCE h_instance, HWND h_wnd) : m_ptr_engine(std::make_unique<CVoidEgine>(h_instance, h_wnd))
+CEngineWrapper::CEngineWrapper(HINSTANCE h_instance, HWND h_wnd) : m_ptr_engine(std::make_unique<CDeferredRenderPipeline>(h_instance, h_wnd))
 {
 
 }

@@ -42,9 +42,6 @@
     <ClInclude Include="framework.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="Modules\EngineImp\VoidEngineImp.h">
-      <Filter>EngineImp</Filter>
-    </ClInclude>
     <ClInclude Include="Modules\ShadowMap\ShadowMap.h">
       <Filter>ShadowMap</Filter>
     </ClInclude>
@@ -65,9 +62,6 @@
     </ClInclude>
     <ClInclude Include="VoidEngineInterface.h">
       <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="Modules\EngineImp\CBaseEngine.h">
-      <Filter>EngineImp</Filter>
     </ClInclude>
     <ClInclude Include="Modules\Common\RenderItems.h">
       <Filter>Common</Filter>
@@ -105,6 +99,18 @@
     <ClInclude Include="Modules\RenderItemUtil\RenderItemUtil.h">
       <Filter>RenderItemFillUtil</Filter>
     </ClInclude>
+    <ClInclude Include="Modules\EngineImp\VoidEngineImpInterface.h">
+      <Filter>EngineImp</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\EngineImp\CBaseRenderPipeline.h">
+      <Filter>EngineImp</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\EngineImp\DeferredRenderPipeline.h">
+      <Filter>EngineImp</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\EngineImp\ZBufferRenderPipeline.h">
+      <Filter>EngineImp</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -112,9 +118,6 @@
     </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="Modules\EngineImp\VoidEngineImp.cpp">
-      <Filter>EngineImp</Filter>
     </ClCompile>
     <ClCompile Include="Modules\FrameResource\FrameResource.cpp">
       <Filter>FrameResource</Filter>
@@ -133,9 +136,6 @@
     </ClCompile>
     <ClCompile Include="VoidEngineInterface.cpp">
       <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="Modules\EngineImp\CBaseEngine.cpp">
-      <Filter>EngineImp</Filter>
     </ClCompile>
     <ClCompile Include="Modules\Common\Camera.cpp">
       <Filter>Common</Filter>
@@ -157,6 +157,15 @@
     </ClCompile>
     <ClCompile Include="Modules\RenderItemUtil\RenderItemUtil.cpp">
       <Filter>RenderItemFillUtil</Filter>
+    </ClCompile>
+    <ClCompile Include="Modules\EngineImp\CBaseRenderPipeline.cpp">
+      <Filter>EngineImp</Filter>
+    </ClCompile>
+    <ClCompile Include="Modules\EngineImp\DeferredRenderPipeline.cpp">
+      <Filter>EngineImp</Filter>
+    </ClCompile>
+    <ClCompile Include="Modules\EngineImp\ZBufferRenderPipeline.cpp">
+      <Filter>EngineImp</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>
