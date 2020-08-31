@@ -18,7 +18,7 @@
 #pragma comment(lib, "dxgi.lib")
 
 
-class IEngine
+class IRenderPipeline
 {
 public:
 	virtual bool Initialize() = 0;
@@ -28,20 +28,24 @@ public:
     virtual void PushModels(std::vector<RenderItem*>& render_items) = 0;
 	virtual bool InitDirect3D() = 0;
 	virtual void Debug() = 0;
+	virtual void PitchCamera(float rad) = 0;
+	virtual void RotateCameraY(float rad) = 0;
+	virtual void MoveCamera(float dis) = 0;
+	virtual void StrafeCamera(float dis) = 0;
 };
 
-class CBaseEngine : public IEngine
+class CBaseRenderPipeline : public IRenderPipeline
 {
 protected:
 
-    CBaseEngine(HINSTANCE hInstance, HWND wnd);
-    CBaseEngine(const CBaseEngine& rhs) = delete;
-    CBaseEngine& operator=(const CBaseEngine& rhs) = delete;
-    virtual ~CBaseEngine();
+    CBaseRenderPipeline(HINSTANCE hInstance, HWND wnd);
+    CBaseRenderPipeline(const CBaseRenderPipeline& rhs) = delete;
+    CBaseRenderPipeline& operator=(const CBaseRenderPipeline& rhs) = delete;
+    virtual ~CBaseRenderPipeline();
 
 public:
 
-    static CBaseEngine* GetApp();
+    static CBaseRenderPipeline* GetApp();
     virtual void Debug() override;
 	HINSTANCE AppInst()const;
 	HWND      MainWnd()const;
@@ -52,6 +56,10 @@ public:
 	virtual bool InitDirect3D();
 	virtual bool Initialize();
     virtual void PushModels(std::vector<RenderItem*>& render_items) = 0;
+	virtual void PitchCamera(float rad) = 0;
+	virtual void RotateCameraY(float rad) = 0;
+	virtual void MoveCamera(float dis) = 0;
+	virtual void StrafeCamera(float dis) = 0;
 protected:
     virtual void CreateRtvAndDsvDescriptorHeaps();
 	virtual void OnResize(); 
@@ -78,7 +86,7 @@ protected:
 
 protected:
 
-    static CBaseEngine* m_engine;
+    static CBaseRenderPipeline* m_engine;
 
     HINSTANCE mhAppInst = nullptr; // application instance handle
     HWND      mhMainWnd = nullptr; // main window handle
@@ -127,5 +135,7 @@ protected:
     DXGI_FORMAT mDepthStencilFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
 	int mClientWidth = 800;
 	int mClientHeight = 600;
+
+
 };
 

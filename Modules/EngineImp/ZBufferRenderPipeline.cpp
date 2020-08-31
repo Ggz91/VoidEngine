@@ -1,7 +1,7 @@
-#include "VoidEngineImp.h"
+#include "ZBufferRenderPipeline.h"
 #include <iostream>
 
-#include "CBaseEngine.h"
+#include "CBaseRenderPipeline.h"
 #include "../Common/MathHelper.h"
 #include "../Common/UploadBuffer.h"
 #include "../Common/GeometryGenerator.h"
@@ -9,10 +9,10 @@
 #include "../ShadowMap/ShadowMap.h"
 #include "../RenderItemUtil/RenderItemUtil.h"
 
-const int gNumFrameResources = 3;
+extern const int gNumFrameResources;
 
-CVoidEgine::CVoidEgine(HINSTANCE hInstance, HWND wnd)
-	: CBaseEngine(hInstance, wnd)
+CZBufferRenderPipeline::CZBufferRenderPipeline(HINSTANCE hInstance, HWND wnd)
+	: CBaseRenderPipeline(hInstance, wnd)
 {
 	// Estimate the scene bounding sphere manually since we know how the scene was constructed.
 	// The grid is the "widest object" with a width of 20 and depth of 30.0f, and centered at
@@ -22,15 +22,15 @@ CVoidEgine::CVoidEgine(HINSTANCE hInstance, HWND wnd)
 	mSceneBounds.Radius = sqrtf(10.0f * 10.0f + 15.0f * 15.0f);
 }
 
-CVoidEgine::~CVoidEgine()
+CZBufferRenderPipeline::~CZBufferRenderPipeline()
 {
 	if (md3dDevice != nullptr)
 		FlushCommandQueue();
 }
 
-bool CVoidEgine::Initialize()
+bool CZBufferRenderPipeline::Initialize()
 {
-	if (!CBaseEngine::Initialize())
+	if (!CBaseRenderPipeline::Initialize())
 		return false;
 
 	// Reset the command list to prep for initialization commands.
@@ -60,7 +60,7 @@ bool CVoidEgine::Initialize()
 
 
 
-void CVoidEgine::PushModels(std::vector<RenderItem*>& render_items)
+void CZBufferRenderPipeline::PushModels(std::vector<RenderItem*>& render_items)
 {
 	FlushCommandQueue();
 	ThrowIfFailed(mDirectCmdListAlloc->Reset());
@@ -75,38 +75,44 @@ void CVoidEgine::PushModels(std::vector<RenderItem*>& render_items)
 	FlushCommandQueue();
 }
 
-void CVoidEgine::CreateRtvAndDsvDescriptorHeaps()
-{
-	CBaseEngine::CreateRtvAndDsvDescriptorHeaps();
-	// Add +1 for screen normal map, +2 for ambient maps.
-// 	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc;
-// 	rtvHeapDesc.NumDescriptors = SwapChainBufferCount + 3;
-// 	rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-// 	rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-// 	rtvHeapDesc.NodeMask = 0;
-// 	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(
-// 		&rtvHeapDesc, IID_PPV_ARGS(mRtvHeap.GetAddressOf())));
 
-	// Add +1 DSV for shadow map.
-// 	D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc;
-// 	dsvHeapDesc.NumDescriptors = 2;
-// 	dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
-// 	dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-// 	dsvHeapDesc.NodeMask = 0;
-// 	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(
-// 		&dsvHeapDesc, IID_PPV_ARGS(mDsvHeap.GetAddressOf())));
+
+void CZBufferRenderPipeline::PitchCamera(float rad)
+{
+	mCamera.Pitch(rad);
 }
 
-void CVoidEgine::OnResize()
+void CZBufferRenderPipeline::RotateCameraY(float rad)
 {
-	CBaseEngine::OnResize();
+	mCamera.RotateY(rad);
+}
+
+void CZBufferRenderPipeline::MoveCamera(float dis)
+{
+	mCamera.Walk(dis);
+}
+
+void CZBufferRenderPipeline::StrafeCamera(float dis)
+{
+	mCamera.Strafe(dis);
+}
+
+void CZBufferRenderPipeline::CreateRtvAndDsvDescriptorHeaps()
+{
+	CBaseRenderPipeline::CreateRtvAndDsvDescriptorHeaps();
+}
+
+void CZBufferRenderPipeline::OnResize()
+{
+	CBaseRenderPipeline::OnResize();
 
 	mCamera.SetLens(0.25f * MathHelper::Pi, AspectRatio(), 1.0f, 10000.0f);
 
 }
 
-void CVoidEgine::Update(const GameTimer& gt)
+void CZBufferRenderPipeline::Update(const GameTimer& gt)
 {
+	mCamera.UpdateViewMatrix();
 	// Cycle through the circular frame resource array.
 	mCurrFrameResourceIndex = (mCurrFrameResourceIndex + 1) % gNumFrameResources;
 	mCurrFrameResource = mFrameResources[mCurrFrameResourceIndex].get();
@@ -140,7 +146,12 @@ void CVoidEgine::Update(const GameTimer& gt)
 	UpdateMainPassCB(gt);
 }
 
-void CVoidEgine::Draw(const GameTimer& gt)
+void CZBufferRenderPipeline::Draw(const GameTimer& gt)
+{
+	DrawWithZBuffer(gt);
+}
+
+void CZBufferRenderPipeline::DrawWithZBuffer(const GameTimer& gt)
 {
 	auto cmdListAlloc = mCurrFrameResource->CmdListAlloc;
 
@@ -191,7 +202,6 @@ void CVoidEgine::Draw(const GameTimer& gt)
 	// Indicate a state transition on the resource usage.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
 		D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
-
 	// Done recording commands.
 	ThrowIfFailed(mCommandList->Close());
 
@@ -212,7 +222,7 @@ void CVoidEgine::Draw(const GameTimer& gt)
 	mCommandQueue->Signal(mFence.Get(), mCurrentFence);
 }
 
-void CVoidEgine::UpdateObjectCBs(const GameTimer& gt)
+void CZBufferRenderPipeline::UpdateObjectCBs(const GameTimer& gt)
 {
 	auto currObjectCB = mCurrFrameResource->ObjectCB.get();
 	for (auto& e : mAllRitems)
@@ -240,7 +250,7 @@ void CVoidEgine::UpdateObjectCBs(const GameTimer& gt)
 	}
 }
 
-void CVoidEgine::UpdateMaterialBuffer(const GameTimer& gt)
+void CZBufferRenderPipeline::UpdateMaterialBuffer(const GameTimer& gt)
 {
 	auto currMaterialBuffer = mCurrFrameResource->MaterialBuffer.get();
 	for (auto& e : mMaterials)
@@ -251,7 +261,7 @@ void CVoidEgine::UpdateMaterialBuffer(const GameTimer& gt)
 		if (mat->NumFramesDirty > 0)
 		{
 			XMMATRIX matTransform = XMLoadFloat4x4(&mat->MatTransform);
-			
+
 			MatData matData;
 			matData.DiffuseAlbedo = mat->DiffuseAlbedo;
 			matData.FresnelR0 = mat->FresnelR0;
@@ -268,7 +278,7 @@ void CVoidEgine::UpdateMaterialBuffer(const GameTimer& gt)
 	}
 }
 
-void CVoidEgine::UpdateShadowTransform(const GameTimer& gt)
+void CZBufferRenderPipeline::UpdateShadowTransform(const GameTimer& gt)
 {
 	// Only the first "main" light casts a shadow.
 	XMVECTOR lightDir = XMLoadFloat3(&mRotatedLightDirections[0]);
@@ -308,7 +318,7 @@ void CVoidEgine::UpdateShadowTransform(const GameTimer& gt)
 	XMStoreFloat4x4(&mShadowTransform, S);
 }
 
-void CVoidEgine::UpdateMainPassCB(const GameTimer& gt)
+void CZBufferRenderPipeline::UpdateMainPassCB(const GameTimer& gt)
 {
 	XMMATRIX view = mCamera.GetView();
 	XMMATRIX proj = mCamera.GetProj();
@@ -355,7 +365,7 @@ void CVoidEgine::UpdateMainPassCB(const GameTimer& gt)
 	currPassCB->CopyData(0, mMainPassCB);
 }
 
-void CVoidEgine::UpdateShadowPassCB(const GameTimer& gt)
+void CZBufferRenderPipeline::UpdateShadowPassCB(const GameTimer& gt)
 {
 	XMMATRIX view = XMLoadFloat4x4(&mLightView);
 	XMMATRIX proj = XMLoadFloat4x4(&mLightProj);
@@ -384,7 +394,7 @@ void CVoidEgine::UpdateShadowPassCB(const GameTimer& gt)
 	currPassCB->CopyData(1, mShadowPassCB);
 }
 
-void CVoidEgine::UpdateSsaoCB(const GameTimer& gt)
+void CZBufferRenderPipeline::UpdateSsaoCB(const GameTimer& gt)
 {
 	SsaoConstants ssaoCB;
 
@@ -420,48 +430,14 @@ void CVoidEgine::UpdateSsaoCB(const GameTimer& gt)
 	currSsaoCB->CopyData(0, ssaoCB);
 }
 
-void CVoidEgine::BuildRootSignature()
+void CZBufferRenderPipeline::BuildRootSignature()
 {
-	// Root parameter can be a table, root descriptor or root constants.
-	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
-
-	CD3DX12_DESCRIPTOR_RANGE tex_table;
-	tex_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 48, 0, 0);
-
-	// Perfomance TIP: Order from most frequent to least frequent.
-	slotRootParameter[0].InitAsConstantBufferView(0);
-	slotRootParameter[1].InitAsConstantBufferView(1);
-	slotRootParameter[2].InitAsShaderResourceView(0, 1);
-	slotRootParameter[3].InitAsDescriptorTable(1, &tex_table, D3D12_SHADER_VISIBILITY_PIXEL);
-
-	auto staticSamplers = GetStaticSamplers();
-
-	// A root signature is an array of root parameters.
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter,
-		(UINT)staticSamplers.size(), staticSamplers.data(),
-		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
-
-	// create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
-	ComPtr<ID3DBlob> serializedRootSig = nullptr;
-	ComPtr<ID3DBlob> errorBlob = nullptr;
-	HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
-		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
-
-	if (errorBlob != nullptr)
-	{
-		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
-	}
-	ThrowIfFailed(hr);
-
-	ThrowIfFailed(md3dDevice->CreateRootSignature(
-		0,
-		serializedRootSig->GetBufferPointer(),
-		serializedRootSig->GetBufferSize(),
-		IID_PPV_ARGS(mRootSignature.GetAddressOf())));
+	BuildZbufferRootSignature();
 }
 
-void CVoidEgine::BuildDescriptorHeaps()
+void CZBufferRenderPipeline::BuildDescriptorHeaps()
 {
+	//+2 for g-buffers
 	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
 	srvHeapDesc.NumDescriptors = mTextures.size();
 	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
@@ -485,13 +461,13 @@ void CVoidEgine::BuildDescriptorHeaps()
 		hDescriptor.Offset(1, mCbvSrvUavDescriptorSize);
 		itr++;
 	}
+
 }
 
-void CVoidEgine::BuildShadersAndInputLayout()
+void CZBufferRenderPipeline::BuildShadersAndInputLayout()
 {
-
-	mShaders["standardVS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Default.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["opaquePS"] = d3dUtil::CompileShader(L"..\\Resources\\Shaders\\Default.hlsl", nullptr, "PS", "ps_5_1");
+	mShaders["standardVS"] = d3dUtil::CompileShader(L".\\Shaders\\Default.hlsl", nullptr, "VS", "vs_5_1");
+	mShaders["opaquePS"] = d3dUtil::CompileShader(L".\\Shaders\\Default.hlsl", nullptr, "PS", "ps_5_1");
 
 	mInputLayout =
 	{
@@ -501,55 +477,49 @@ void CVoidEgine::BuildShadersAndInputLayout()
 		{ "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 32, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 	};
 
-	mSkinnedInputLayout =
-	{
-		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 32, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "WEIGHTS", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 44, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "BONEINDICES", 0, DXGI_FORMAT_R8G8B8A8_UINT, 0, 56, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
-	};
 }
 
 
-void CVoidEgine::BuildPSOs()
+void CZBufferRenderPipeline::BuildPSOs()
 {
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaquePsoDesc;
+	BuildZBufferPSO();
+}
 
-	//
-	// PSO for opaque objects.
-	//
-	ZeroMemory(&opaquePsoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
-	opaquePsoDesc.InputLayout = { mInputLayout.data(), (UINT)mInputLayout.size() };
-	opaquePsoDesc.pRootSignature = mRootSignature.Get();
-	opaquePsoDesc.VS =
+void CZBufferRenderPipeline::BuildZBufferPSO()
+{
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc;
+	ZeroMemory(&pso_desc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
+	pso_desc.InputLayout = { mInputLayout.data(), (UINT)mInputLayout.size() };
+	pso_desc.pRootSignature = mRootSignature.Get();
+	pso_desc.VS =
 	{
 		reinterpret_cast<BYTE*>(mShaders["standardVS"]->GetBufferPointer()),
 		mShaders["standardVS"]->GetBufferSize()
 	};
-	opaquePsoDesc.PS =
+	pso_desc.PS =
 	{
 		reinterpret_cast<BYTE*>(mShaders["opaquePS"]->GetBufferPointer()),
 		mShaders["opaquePS"]->GetBufferSize()
 	};
-	opaquePsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-	opaquePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-	opaquePsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-	opaquePsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-	opaquePsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-	opaquePsoDesc.SampleMask = UINT_MAX;
-	opaquePsoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-	opaquePsoDesc.NumRenderTargets = 1;
-	opaquePsoDesc.RTVFormats[0] = mBackBufferFormat;
-	opaquePsoDesc.SampleDesc.Count = m4xMsaaState ? 4 : 1;
-	opaquePsoDesc.SampleDesc.Quality = m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
-	opaquePsoDesc.DSVFormat = mDepthStencilFormat;
-	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&mPSOs["opaque"])));
+	pso_desc.NumRenderTargets = 1;
+	pso_desc.RTVFormats[0] = mBackBufferFormat;
 
+	pso_desc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	pso_desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+	pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+	pso_desc.RasterizerState.FrontCounterClockwise = false;
+	pso_desc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	pso_desc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+	pso_desc.SampleMask = UINT_MAX;
+	pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+
+	pso_desc.SampleDesc.Count = m4xMsaaState ? 4 : 1;
+	pso_desc.SampleDesc.Quality = m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
+	pso_desc.DSVFormat = mDepthStencilFormat;
+	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&mPSOs["opaque"])));
 }
 
-void CVoidEgine::BuildFrameResources()
+void CZBufferRenderPipeline::BuildFrameResources()
 {
 	for (int i = 0; i < gNumFrameResources; ++i)
 	{
@@ -560,7 +530,7 @@ void CVoidEgine::BuildFrameResources()
 	}
 }
 
-void CVoidEgine::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems)
+void CZBufferRenderPipeline::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems)
 {
 	if (NULL == mCurrFrameResource->ObjectCB)
 	{
@@ -588,7 +558,7 @@ void CVoidEgine::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::
 	}
 }
 
-void CVoidEgine::DrawSceneToShadowMap()
+void CZBufferRenderPipeline::DrawSceneToShadowMap()
 {
 	mCommandList->RSSetViewports(1, &mShadowMap->Viewport());
 	mCommandList->RSSetScissorRects(1, &mShadowMap->ScissorRect());
@@ -621,7 +591,7 @@ void CVoidEgine::DrawSceneToShadowMap()
 		D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ));
 }
 
-void CVoidEgine::DrawNormalsAndDepth()
+void CZBufferRenderPipeline::DrawNormalsAndDepth()
 {
 	mCommandList->RSSetViewports(1, &mScreenViewport);
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
@@ -656,23 +626,23 @@ void CVoidEgine::DrawNormalsAndDepth()
 		D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ));
 }
 
-void CVoidEgine::PushRenderItems(std::vector<RenderItem*>& render_items)
+void CZBufferRenderPipeline::PushRenderItems(std::vector<RenderItem*>& render_items)
 {
-	
+
 	RenderItemUtil::FillGeoData(render_items, md3dDevice.Get(), mCommandList.Get());
-	
+
 	auto& opaque_items = mRitemLayer[(int)RenderLayer::Opaque];
 	opaque_items.insert(opaque_items.end(), render_items.begin(), render_items.end());
 
 	mAllRitems.insert(mAllRitems.end(), render_items.begin(), render_items.end());
 }
 
-void CVoidEgine::PushMats(std::vector<RenderItem*>& render_items)
+void CZBufferRenderPipeline::PushMats(std::vector<RenderItem*>& render_items)
 {
 	//LoadTexture
 	int tex_index = 0;
 	std::unordered_map<std::string, int> tex_indices;
-	for (int i=0; i<render_items.size(); ++i)
+	for (int i = 0; i < render_items.size(); ++i)
 	{
 		//DiffuseMap
 		auto diffuse_tex_itr = tex_indices.find(render_items[i]->Mat->Name + "_diffuse");
@@ -692,7 +662,7 @@ void CVoidEgine::PushMats(std::vector<RenderItem*>& render_items)
 			tex_indices[diffuse_map->Name] = render_items[i]->Mat->DiffuseSrvHeapIndex;
 			mTextures[diffuse_map->Name] = std::move(diffuse_map);
 		}
-		
+
 
 		//NormalMap
 		auto normal_tex_itr = tex_indices.find(render_items[i]->Mat->Name + "_normal");
@@ -712,42 +682,42 @@ void CVoidEgine::PushMats(std::vector<RenderItem*>& render_items)
 			tex_indices[normal_map->Name] = render_items[i]->Mat->NormalSrvHeapIndex;
 			mTextures[normal_map->Name] = std::move(normal_map);
 		}
-		
+
 
 		mMaterials[render_items[i]->Mat->Name] = std::move(render_items[i]->Mat);
 	}
-	
+
 }
 
-CD3DX12_CPU_DESCRIPTOR_HANDLE CVoidEgine::GetCpuSrv(int index)const
+CD3DX12_CPU_DESCRIPTOR_HANDLE CZBufferRenderPipeline::GetCpuSrv(int index)const
 {
 	auto srv = CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 	srv.Offset(index, mCbvSrvUavDescriptorSize);
 	return srv;
 }
 
-CD3DX12_GPU_DESCRIPTOR_HANDLE CVoidEgine::GetGpuSrv(int index)const
+CD3DX12_GPU_DESCRIPTOR_HANDLE CZBufferRenderPipeline::GetGpuSrv(int index)const
 {
 	auto srv = CD3DX12_GPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 	srv.Offset(index, mCbvSrvUavDescriptorSize);
 	return srv;
 }
 
-CD3DX12_CPU_DESCRIPTOR_HANDLE CVoidEgine::GetDsv(int index)const
+CD3DX12_CPU_DESCRIPTOR_HANDLE CZBufferRenderPipeline::GetDsv(int index)const
 {
 	auto dsv = CD3DX12_CPU_DESCRIPTOR_HANDLE(mDsvHeap->GetCPUDescriptorHandleForHeapStart());
 	dsv.Offset(index, mDsvDescriptorSize);
 	return dsv;
 }
 
-CD3DX12_CPU_DESCRIPTOR_HANDLE CVoidEgine::GetRtv(int index)const
+CD3DX12_CPU_DESCRIPTOR_HANDLE CZBufferRenderPipeline::GetRtv(int index)const
 {
 	auto rtv = CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart());
 	rtv.Offset(index, mRtvDescriptorSize);
 	return rtv;
 }
 
-std::array<const CD3DX12_STATIC_SAMPLER_DESC, 7> CVoidEgine::GetStaticSamplers()
+std::array<const CD3DX12_STATIC_SAMPLER_DESC, 7> CZBufferRenderPipeline::GetStaticSamplers()
 {
 	// Applications usually only need a handful of samplers.  So just define them all up front
 	// and keep them available as part of the root signature.  
@@ -817,3 +787,42 @@ std::array<const CD3DX12_STATIC_SAMPLER_DESC, 7> CVoidEgine::GetStaticSamplers()
 	};
 }
 
+void CZBufferRenderPipeline::BuildZbufferRootSignature()
+{
+	// Root parameter can be a table, root descriptor or root constants.
+	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
+
+	CD3DX12_DESCRIPTOR_RANGE tex_table;
+	tex_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 48, 0, 0);
+
+	// Perfomance TIP: Order from most frequent to least frequent.
+	slotRootParameter[0].InitAsConstantBufferView(0);
+	slotRootParameter[1].InitAsConstantBufferView(1);
+	slotRootParameter[2].InitAsShaderResourceView(0, 1);
+	slotRootParameter[3].InitAsDescriptorTable(1, &tex_table, D3D12_SHADER_VISIBILITY_PIXEL);
+
+	auto staticSamplers = GetStaticSamplers();
+
+	// A root signature is an array of root parameters.
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter,
+		(UINT)staticSamplers.size(), staticSamplers.data(),
+		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+	// create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
+	ComPtr<ID3DBlob> serializedRootSig = nullptr;
+	ComPtr<ID3DBlob> errorBlob = nullptr;
+	HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
+
+	if (errorBlob != nullptr)
+	{
+		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+	}
+	ThrowIfFailed(hr);
+
+	ThrowIfFailed(md3dDevice->CreateRootSignature(
+		0,
+		serializedRootSig->GetBufferPointer(),
+		serializedRootSig->GetBufferSize(),
+		IID_PPV_ARGS(mRootSignature.GetAddressOf())));
+}

@@ -36,9 +36,6 @@ void RenderItemUtil::FillGeoData(std::vector<RenderItem*>& render_items, ID3D12D
 void RenderItemUtil::FillSingleGeoData(RenderItem* render_item, ID3D12Device* device,
 	ID3D12GraphicsCommandList* cmdList, std::unique_ptr <RIUAccParam>&& acc_param, MeshGeometry* geo)
 {
-	XMStoreFloat4x4(&render_item->World, XMMatrixTranslation(std::rand() % 10000 * (std::rand() % 2 ? 1 : -1), std::rand() % 100, -std::rand() % 10000));
-	//XMStoreFloat4x4(&render_item->World, XMMatrixTranslation(render_item->ObjCBIndex * 100, render_item->ObjCBIndex * 100, render_item->ObjCBIndex * 100));
-
 	render_item->Geo = geo;
 	auto data = render_item->Data;
 	

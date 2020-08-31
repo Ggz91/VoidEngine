@@ -2,25 +2,25 @@
 // d3dApp.cpp by Frank Luna (C) 2015 All Rights Reserved.
 //***************************************************************************************
 
-#include "CBaseEngine.h"
+#include "CBaseRenderPipeline.h"
 #include <WindowsX.h>
 
 using Microsoft::WRL::ComPtr;
 using namespace std;
 using namespace DirectX;
 
-CBaseEngine* CBaseEngine::m_engine = nullptr;
-CBaseEngine* CBaseEngine::GetApp()
+CBaseRenderPipeline* CBaseRenderPipeline::m_engine = nullptr;
+CBaseRenderPipeline* CBaseRenderPipeline::GetApp()
 {
     return m_engine;
 }
 
-void CBaseEngine::Debug()
+void CBaseRenderPipeline::Debug()
 {
     auto hr = md3dDevice->GetDeviceRemovedReason();
 }
 
-CBaseEngine::CBaseEngine(HINSTANCE hInstance, HWND wnd)
+CBaseRenderPipeline::CBaseRenderPipeline(HINSTANCE hInstance, HWND wnd)
 :	mhAppInst(hInstance), mhMainWnd(wnd)
 {
     // Only one D3DApp can be constructed.
@@ -28,33 +28,33 @@ CBaseEngine::CBaseEngine(HINSTANCE hInstance, HWND wnd)
     m_engine = this;
 }
 
-CBaseEngine::~CBaseEngine()
+CBaseRenderPipeline::~CBaseRenderPipeline()
 {
 	if(md3dDevice != nullptr)
 		FlushCommandQueue();
 }
 
-HINSTANCE CBaseEngine::AppInst()const
+HINSTANCE CBaseRenderPipeline::AppInst()const
 {
 	return mhAppInst;
 }
 
-HWND CBaseEngine::MainWnd()const
+HWND CBaseRenderPipeline::MainWnd()const
 {
 	return mhMainWnd;
 }
 
-float CBaseEngine::AspectRatio()const
+float CBaseRenderPipeline::AspectRatio()const
 {
 	return static_cast<float>(mClientWidth) / mClientHeight;
 }
 
-bool CBaseEngine::Get4xMsaaState()const
+bool CBaseRenderPipeline::Get4xMsaaState()const
 {
     return m4xMsaaState;
 }
 
-void CBaseEngine::Set4xMsaaState(bool value)
+void CBaseRenderPipeline::Set4xMsaaState(bool value)
 {
     if(m4xMsaaState != value)
     {
@@ -66,12 +66,12 @@ void CBaseEngine::Set4xMsaaState(bool value)
     }
 }
 
-bool CBaseEngine::Initialize()
+bool CBaseRenderPipeline::Initialize()
 {
 	return true;
 }
  
-void CBaseEngine::CreateRtvAndDsvDescriptorHeaps()
+void CBaseRenderPipeline::CreateRtvAndDsvDescriptorHeaps()
 {
     D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc;
     rtvHeapDesc.NumDescriptors = SwapChainBufferCount;
@@ -91,7 +91,7 @@ void CBaseEngine::CreateRtvAndDsvDescriptorHeaps()
         &dsvHeapDesc, IID_PPV_ARGS(mDsvHeap.GetAddressOf())));
 }
 
-void CBaseEngine::OnResize()
+void CBaseRenderPipeline::OnResize()
 {
 	assert(md3dDevice);
 	assert(mSwapChain);
@@ -177,7 +177,7 @@ void CBaseEngine::OnResize()
 }
  
 
-bool CBaseEngine::InitDirect3D()
+bool CBaseRenderPipeline::InitDirect3D()
 {
 #if defined(DEBUG) || defined(_DEBUG) 
 	// Enable the D3D12 debug layer.
@@ -242,7 +242,7 @@ bool CBaseEngine::InitDirect3D()
 	return true;
 }
 
-void CBaseEngine::CreateCommandObjects()
+void CBaseRenderPipeline::CreateCommandObjects()
 {
 	D3D12_COMMAND_QUEUE_DESC queueDesc = {};
 	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
@@ -266,7 +266,7 @@ void CBaseEngine::CreateCommandObjects()
 	mCommandList->Close();
 }
 
-void CBaseEngine::CreateSwapChain()
+void CBaseRenderPipeline::CreateSwapChain()
 {
     // Release the previous swapchain we will be recreating.
     mSwapChain.Reset();
@@ -295,7 +295,7 @@ void CBaseEngine::CreateSwapChain()
 		mSwapChain.GetAddressOf()));
 }
 
-void CBaseEngine::FlushCommandQueue()
+void CBaseRenderPipeline::FlushCommandQueue()
 {
 	// Advance the fence value to mark commands up to this fence point.
     mCurrentFence++;
@@ -319,12 +319,12 @@ void CBaseEngine::FlushCommandQueue()
 	}
 }
 
-ID3D12Resource* CBaseEngine::CurrentBackBuffer()const
+ID3D12Resource* CBaseRenderPipeline::CurrentBackBuffer()const
 {
 	return mSwapChainBuffer[mCurrBackBuffer].Get();
 }
 
-D3D12_CPU_DESCRIPTOR_HANDLE CBaseEngine::CurrentBackBufferView()const
+D3D12_CPU_DESCRIPTOR_HANDLE CBaseRenderPipeline::CurrentBackBufferView()const
 {
 	return CD3DX12_CPU_DESCRIPTOR_HANDLE(
 		mRtvHeap->GetCPUDescriptorHandleForHeapStart(),
@@ -332,12 +332,12 @@ D3D12_CPU_DESCRIPTOR_HANDLE CBaseEngine::CurrentBackBufferView()const
 		mRtvDescriptorSize);
 }
 
-D3D12_CPU_DESCRIPTOR_HANDLE CBaseEngine::DepthStencilView()const
+D3D12_CPU_DESCRIPTOR_HANDLE CBaseRenderPipeline::DepthStencilView()const
 {
 	return mDsvHeap->GetCPUDescriptorHandleForHeapStart();
 }
 
-void CBaseEngine::LogAdapters()
+void CBaseRenderPipeline::LogAdapters()
 {
     UINT i = 0;
     IDXGIAdapter* adapter = nullptr;
@@ -365,7 +365,7 @@ void CBaseEngine::LogAdapters()
     }
 }
 
-void CBaseEngine::LogAdapterOutputs(IDXGIAdapter* adapter)
+void CBaseRenderPipeline::LogAdapterOutputs(IDXGIAdapter* adapter)
 {
     UINT i = 0;
     IDXGIOutput* output = nullptr;
@@ -387,7 +387,7 @@ void CBaseEngine::LogAdapterOutputs(IDXGIAdapter* adapter)
     }
 }
 
-void CBaseEngine::LogOutputDisplayModes(IDXGIOutput* output, DXGI_FORMAT format)
+void CBaseRenderPipeline::LogOutputDisplayModes(IDXGIOutput* output, DXGI_FORMAT format)
 {
     UINT count = 0;
     UINT flags = 0;

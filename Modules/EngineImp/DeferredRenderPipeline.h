@@ -1,5 +1,5 @@
 #pragma once
-#include "../EngineImp/CBaseEngine.h"
+#include "../EngineImp/CBaseRenderPipeline.h"
 #include "../Skin/SkinnedData.h"
 #include "../FrameResource/FrameResource.h"
 #include "../Common/Camera.h"
@@ -11,25 +11,29 @@ using Microsoft::WRL::ComPtr;
 using namespace DirectX;
 using namespace DirectX::PackedVector;
 
-
-
-
-
-class CVoidEgine : public CBaseEngine
+const int gGbufferCount = 2;
+class CDeferredRenderPipeline : public CBaseRenderPipeline
 {
 public:
-	CVoidEgine(HINSTANCE hInstance, HWND wnd);
-	CVoidEgine(const CVoidEgine& rhs) = delete;
-	CVoidEgine& operator=(const CVoidEgine& rhs) = delete;
-	~CVoidEgine();
+	CDeferredRenderPipeline(HINSTANCE hInstance, HWND wnd);
+	CDeferredRenderPipeline(const CDeferredRenderPipeline& rhs) = delete;
+	CDeferredRenderPipeline& operator=(const CDeferredRenderPipeline& rhs) = delete;
+	~CDeferredRenderPipeline();
 
 	virtual bool Initialize()override;
 	virtual void PushModels(std::vector<RenderItem*>& render_items) override;
+
+	virtual void PitchCamera(float rad);
+	virtual void RotateCameraY(float rad);
+	virtual void MoveCamera(float dis);
+	virtual void StrafeCamera(float dis);
 private:
 	virtual void CreateRtvAndDsvDescriptorHeaps()override;
 	virtual void OnResize()override;
 	virtual void Update(const GameTimer& gt)override;
 	virtual void Draw(const GameTimer& gt)override;
+	
+	void DrawWithDeferredTexturing(const GameTimer& gt);
 
 	void UpdateObjectCBs(const GameTimer& gt);
 	void UpdateMaterialBuffer(const GameTimer& gt);
@@ -42,6 +46,7 @@ private:
 	void BuildDescriptorHeaps();
 	void BuildShadersAndInputLayout();
 	void BuildPSOs();
+	void BuildDeferredPSO();
 	void BuildFrameResources();
 	void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems);
 	void DrawSceneToShadowMap();
@@ -51,10 +56,20 @@ private:
 	CD3DX12_CPU_DESCRIPTOR_HANDLE GetCpuSrv(int index)const;
 	CD3DX12_GPU_DESCRIPTOR_HANDLE GetGpuSrv(int index)const;
 	CD3DX12_CPU_DESCRIPTOR_HANDLE GetDsv(int index)const;
+
+
 	CD3DX12_CPU_DESCRIPTOR_HANDLE GetRtv(int index)const;
 
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 7> GetStaticSamplers();
 
+	void CreateGBufferRTV();
+	UINT GBufferSize() const;
+	void DeferredDrawFillGBufferPass();
+	void DeferredDrawShadingPass();
+
+	void BuildDeferredRootSignature();
+	void BuildDeferredGSRootSignature();
+	void BuildDeferredShadingRootSignature();
 private:
 
 	std::vector<std::unique_ptr<FrameResource>> mFrameResources;
@@ -62,6 +77,8 @@ private:
 	int mCurrFrameResourceIndex = 0;
 
 	ComPtr<ID3D12RootSignature> mRootSignature = nullptr;
+	ComPtr<ID3D12RootSignature> m_deferred_gs_root_signature = nullptr;
+	ComPtr<ID3D12RootSignature> m_deferred_shading_root_signature = nullptr;
 	ComPtr<ID3D12RootSignature> mSsaoRootSignature = nullptr;
 
 	ComPtr<ID3D12DescriptorHeap> mSrvDescriptorHeap = nullptr;
@@ -73,7 +90,6 @@ private:
 	std::unordered_map<std::string, ComPtr<ID3D12PipelineState>> mPSOs;
 
 	std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout;
-	std::vector<D3D12_INPUT_ELEMENT_DESC> mSkinnedInputLayout;
 
 	// List of all the render items.
 	std::vector<std::unique_ptr<RenderItem>> mAllRitems;
@@ -119,4 +135,6 @@ private:
 	};
 	XMFLOAT3 mRotatedLightDirections[3];
 
+	Microsoft::WRL::ComPtr<ID3D12Resource> m_g_buffer[gGbufferCount];
+	DXGI_FORMAT m_g_buffer_format[gGbufferCount];
 };
