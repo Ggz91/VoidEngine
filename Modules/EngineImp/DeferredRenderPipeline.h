@@ -22,6 +22,11 @@ public:
 
 	virtual bool Initialize()override;
 	virtual void PushModels(std::vector<RenderItem*>& render_items) override;
+
+	virtual void PitchCamera(float rad);
+	virtual void RotateCameraY(float rad);
+	virtual void MoveCamera(float dis);
+	virtual void StrafeCamera(float dis);
 private:
 	virtual void CreateRtvAndDsvDescriptorHeaps()override;
 	virtual void OnResize()override;

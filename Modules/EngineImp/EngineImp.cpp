@@ -58,9 +58,25 @@ void CEngine::Debug()
 	m_render_pipeline->Debug();
 }
 
+void CEngine::PitchCamera(float rad)
+{
+	m_render_pipeline->PitchCamera(rad);
+}
 
+void CEngine::RotateCameraY(float rad)
+{
+	m_render_pipeline->RotateCameraY(rad);
+}
 
+void CEngine::MoveCamera(float dis)
+{
+	m_render_pipeline->MoveCamera(dis);
+}
 
+void CEngine::StrafeCamera(float dis)
+{
+	m_render_pipeline->StrafeCamera(dis);
+}
 
 
 

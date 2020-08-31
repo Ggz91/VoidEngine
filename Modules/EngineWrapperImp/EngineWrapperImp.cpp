@@ -55,3 +55,23 @@ void CEngineWrapper::Debug()
 	m_ptr_engine->Debug();
 }
 
+void CEngineWrapper::PitchCamera(float rad)
+{
+	m_ptr_engine->PitchCamera(rad);
+}
+
+void CEngineWrapper::RotateCameraY(float rad)
+{
+	m_ptr_engine->RotateCameraY(rad);
+}
+
+void CEngineWrapper::MoveCamera(float dis)
+{
+	m_ptr_engine->MoveCamera(dis);
+}
+
+void CEngineWrapper::StrafeCamera(float dis)
+{
+	m_ptr_engine->StrafeCamera(dis);
+}
+

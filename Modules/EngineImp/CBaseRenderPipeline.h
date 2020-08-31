@@ -28,6 +28,10 @@ public:
     virtual void PushModels(std::vector<RenderItem*>& render_items) = 0;
 	virtual bool InitDirect3D() = 0;
 	virtual void Debug() = 0;
+	virtual void PitchCamera(float rad) = 0;
+	virtual void RotateCameraY(float rad) = 0;
+	virtual void MoveCamera(float dis) = 0;
+	virtual void StrafeCamera(float dis) = 0;
 };
 
 class CBaseRenderPipeline : public IRenderPipeline
@@ -52,6 +56,10 @@ public:
 	virtual bool InitDirect3D();
 	virtual bool Initialize();
     virtual void PushModels(std::vector<RenderItem*>& render_items) = 0;
+	virtual void PitchCamera(float rad) = 0;
+	virtual void RotateCameraY(float rad) = 0;
+	virtual void MoveCamera(float dis) = 0;
+	virtual void StrafeCamera(float dis) = 0;
 protected:
     virtual void CreateRtvAndDsvDescriptorHeaps();
 	virtual void OnResize(); 

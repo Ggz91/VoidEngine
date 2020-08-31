@@ -77,6 +77,26 @@ void CDeferredRenderPipeline::PushModels(std::vector<RenderItem*>& render_items)
 
 
 
+void CDeferredRenderPipeline::PitchCamera(float rad)
+{
+	mCamera.Pitch(rad);
+}
+
+void CDeferredRenderPipeline::RotateCameraY(float rad)
+{
+	mCamera.RotateY(rad);
+}
+
+void CDeferredRenderPipeline::MoveCamera(float dis)
+{
+	mCamera.Walk(dis);
+}
+
+void CDeferredRenderPipeline::StrafeCamera(float dis)
+{
+	mCamera.Strafe(dis);
+}
+
 void CDeferredRenderPipeline::CreateRtvAndDsvDescriptorHeaps()
 {
 	//+2 for G-Buffers
@@ -111,6 +131,7 @@ void CDeferredRenderPipeline::OnResize()
 
 void CDeferredRenderPipeline::Update(const GameTimer& gt)
 {
+	mCamera.UpdateViewMatrix();
 	// Cycle through the circular frame resource array.
 	mCurrFrameResourceIndex = (mCurrFrameResourceIndex + 1) % gNumFrameResources;
 	mCurrFrameResource = mFrameResources[mCurrFrameResourceIndex].get();
@@ -489,11 +510,12 @@ void CDeferredRenderPipeline::BuildDeferredPSO()
 
 	gs_pso_desc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
 	gs_pso_desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-	gs_pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+	gs_pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
 	gs_pso_desc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 	gs_pso_desc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
 	gs_pso_desc.DepthStencilState.StencilEnable = true;
 	gs_pso_desc.DepthStencilState.FrontFace.StencilPassOp = D3D12_STENCIL_OP_REPLACE;
+	gs_pso_desc.DepthStencilState.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
 	gs_pso_desc.SampleMask = UINT_MAX;
 	gs_pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 

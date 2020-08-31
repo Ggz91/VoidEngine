@@ -19,6 +19,10 @@ public:
 	void PushModels(std::vector<RenderItem*>& render_items) override;
 	void OnResize() override;
 	void Debug() override;
+	void PitchCamera(float rad) override;
+	void RotateCameraY(float rad) override;
+	virtual void MoveCamera(float dis);
+	virtual void StrafeCamera(float dis);
 private:
 	std::unique_ptr<IEngine> m_ptr_engine;
 };

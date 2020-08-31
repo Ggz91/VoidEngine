@@ -77,6 +77,26 @@ void CZBufferRenderPipeline::PushModels(std::vector<RenderItem*>& render_items)
 
 
 
+void CZBufferRenderPipeline::PitchCamera(float rad)
+{
+	mCamera.Pitch(rad);
+}
+
+void CZBufferRenderPipeline::RotateCameraY(float rad)
+{
+	mCamera.RotateY(rad);
+}
+
+void CZBufferRenderPipeline::MoveCamera(float dis)
+{
+	mCamera.Walk(dis);
+}
+
+void CZBufferRenderPipeline::StrafeCamera(float dis)
+{
+	mCamera.Strafe(dis);
+}
+
 void CZBufferRenderPipeline::CreateRtvAndDsvDescriptorHeaps()
 {
 	CBaseRenderPipeline::CreateRtvAndDsvDescriptorHeaps();
@@ -92,6 +112,7 @@ void CZBufferRenderPipeline::OnResize()
 
 void CZBufferRenderPipeline::Update(const GameTimer& gt)
 {
+	mCamera.UpdateViewMatrix();
 	// Cycle through the circular frame resource array.
 	mCurrFrameResourceIndex = (mCurrFrameResourceIndex + 1) % gNumFrameResources;
 	mCurrFrameResource = mFrameResources[mCurrFrameResourceIndex].get();
@@ -485,7 +506,8 @@ void CZBufferRenderPipeline::BuildZBufferPSO()
 
 	pso_desc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
 	pso_desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-	pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+	pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+	pso_desc.RasterizerState.FrontCounterClockwise = false;
 	pso_desc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 	pso_desc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
 	pso_desc.SampleMask = UINT_MAX;
@@ -495,68 +517,6 @@ void CZBufferRenderPipeline::BuildZBufferPSO()
 	pso_desc.SampleDesc.Quality = m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
 	pso_desc.DSVFormat = mDepthStencilFormat;
 	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&mPSOs["opaque"])));
-}
-
-void CZBufferRenderPipeline::BuildDeferredPSO()
-{
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC gs_pso_desc;
-	ZeroMemory(&gs_pso_desc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
-	gs_pso_desc.InputLayout = { mInputLayout.data(), (UINT)mInputLayout.size() };
-	gs_pso_desc.pRootSignature = m_deferred_gs_root_signature.Get();
-	gs_pso_desc.VS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["DeferredGSVS"]->GetBufferPointer()),
-		mShaders["DeferredGSVS"]->GetBufferSize()
-	};
-	gs_pso_desc.PS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["DeferredGSPS"]->GetBufferPointer()),
-		mShaders["DeferredGSPS"]->GetBufferSize()
-	};
-	gs_pso_desc.NumRenderTargets = 2;
-	gs_pso_desc.RTVFormats[0] = DXGI_FORMAT_R32G32B32A32_UINT;
-	gs_pso_desc.RTVFormats[1] = DXGI_FORMAT_R32_UINT;
-
-	gs_pso_desc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-	gs_pso_desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-	gs_pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-	gs_pso_desc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-	gs_pso_desc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-	gs_pso_desc.DepthStencilState.StencilEnable = true;
-	gs_pso_desc.DepthStencilState.FrontFace.StencilPassOp = D3D12_STENCIL_OP_REPLACE;
-	gs_pso_desc.SampleMask = UINT_MAX;
-	gs_pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-
-	gs_pso_desc.SampleDesc.Count = m4xMsaaState ? 4 : 1;
-	gs_pso_desc.SampleDesc.Quality = m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
-	gs_pso_desc.DSVFormat = mDepthStencilFormat;
-	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&gs_pso_desc, IID_PPV_ARGS(&mPSOs["DeferredGS"])));
-
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC shading_pso_desc = gs_pso_desc;
-	shading_pso_desc.pRootSignature = m_deferred_shading_root_signature.Get();
-	shading_pso_desc.VS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["DeferredShadingVS"]->GetBufferPointer()),
-		mShaders["DeferredShadingVS"]->GetBufferSize()
-	};
-	shading_pso_desc.PS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["DeferredShadingPS"]->GetBufferPointer()),
-		mShaders["DeferredShadingPS"]->GetBufferSize()
-	};
-	shading_pso_desc.DepthStencilState.DepthEnable = false;
-	shading_pso_desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
-	shading_pso_desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-	shading_pso_desc.DepthStencilState.StencilEnable = true;
-	shading_pso_desc.DepthStencilState.StencilWriteMask = 0x0;
-	shading_pso_desc.DepthStencilState.StencilReadMask = 0xFF;
-	shading_pso_desc.DepthStencilState.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_EQUAL;
-	shading_pso_desc.NumRenderTargets = 1;
-	shading_pso_desc.RTVFormats[0] = mBackBufferFormat;
-	shading_pso_desc.RTVFormats[1] = DXGI_FORMAT_UNKNOWN;
-	shading_pso_desc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
-	shading_pso_desc.NodeMask = 0;
-	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&shading_pso_desc, IID_PPV_ARGS(&mPSOs["DeferredShading"])));
 }
 
 void CZBufferRenderPipeline::BuildFrameResources()
