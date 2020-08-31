@@ -1,9 +1,18 @@
 #include "EngineWrapperImp.h"
-#include "../EngineImp/VoidEngineImp.h"
+#include "../EngineImp/DeferredRenderPipeline.h"
+#include "../EngineImp/ZBufferRenderPipeline.h"
 
-CEngineWrapper::CEngineWrapper(HINSTANCE h_instance, HWND h_wnd) : m_ptr_engine(std::make_unique<CVoidEgine>(h_instance, h_wnd))
+CEngineWrapper::CEngineWrapper(HINSTANCE h_instance, HWND h_wnd) 
 {
-
+	EngineInitParam param;
+	param.HInstance = h_instance;
+	param.HWnd = h_wnd;
+#if __ZBuffer_Rendering
+	param.UseDeferredRendering = false;
+#else
+	param.UseDeferredRendering = true;
+#endif
+	m_ptr_engine = std::make_unique<CEngine>(param);
 }
 
 CEngineWrapper::~CEngineWrapper()
@@ -44,5 +53,25 @@ void CEngineWrapper::OnResize()
 void CEngineWrapper::Debug()
 {
 	m_ptr_engine->Debug();
+}
+
+void CEngineWrapper::PitchCamera(float rad)
+{
+	m_ptr_engine->PitchCamera(rad);
+}
+
+void CEngineWrapper::RotateCameraY(float rad)
+{
+	m_ptr_engine->RotateCameraY(rad);
+}
+
+void CEngineWrapper::MoveCamera(float dis)
+{
+	m_ptr_engine->MoveCamera(dis);
+}
+
+void CEngineWrapper::StrafeCamera(float dis)
+{
+	m_ptr_engine->StrafeCamera(dis);
 }
 

@@ -173,8 +173,11 @@ xcopy /y /d ".\Modules\Common" "$(OutDir)..\Modules\Common"</Command>
     <ClInclude Include="Modules\Common\MathHelper.h" />
     <ClInclude Include="Modules\Common\RenderItems.h" />
     <ClInclude Include="Modules\Common\UploadBuffer.h" />
-    <ClInclude Include="Modules\EngineImp\CBaseEngine.h" />
-    <ClInclude Include="Modules\EngineImp\VoidEngineImp.h" />
+    <ClInclude Include="Modules\EngineImp\CBaseRenderPipeline.h" />
+    <ClInclude Include="Modules\EngineImp\DeferredRenderPipeline.h" />
+    <ClInclude Include="Modules\EngineImp\EngineImp.h" />
+    <ClInclude Include="Modules\EngineImp\EngineInterface.h" />
+    <ClInclude Include="Modules\EngineImp\ZBufferRenderPipeline.h" />
     <ClInclude Include="Modules\EngineWrapperImp\EngineWrapperImp.h" />
     <ClInclude Include="Modules\FrameResource\FrameResource.h" />
     <ClInclude Include="Modules\RenderItemUtil\RenderItemUtil.h" />
@@ -191,8 +194,10 @@ xcopy /y /d ".\Modules\Common" "$(OutDir)..\Modules\Common"</Command>
     <ClCompile Include="Modules\Common\GameTimer.cpp" />
     <ClCompile Include="Modules\Common\GeometryGenerator.cpp" />
     <ClCompile Include="Modules\Common\MathHelper.cpp" />
-    <ClCompile Include="Modules\EngineImp\CBaseEngine.cpp" />
-    <ClCompile Include="Modules\EngineImp\VoidEngineImp.cpp" />
+    <ClCompile Include="Modules\EngineImp\CBaseRenderPipeline.cpp" />
+    <ClCompile Include="Modules\EngineImp\DeferredRenderPipeline.cpp" />
+    <ClCompile Include="Modules\EngineImp\EngineImp.cpp" />
+    <ClCompile Include="Modules\EngineImp\ZBufferRenderPipeline.cpp" />
     <ClCompile Include="Modules\EngineWrapperImp\EngineWrapperImp.cpp" />
     <ClCompile Include="Modules\FrameResource\FrameResource.cpp" />
     <ClCompile Include="Modules\RenderItemUtil\RenderItemUtil.cpp" />
