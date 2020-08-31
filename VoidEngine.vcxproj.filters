@@ -37,6 +37,9 @@
     <Filter Include="RenderItemFillUtil">
       <UniqueIdentifier>{f114da72-4c8b-4cbe-891b-a94f3b68346b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="SceneTree">
+      <UniqueIdentifier>{4477f510-307f-4542-aa93-0d787096a327}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="framework.h">
@@ -114,6 +117,15 @@
     <ClInclude Include="Modules\EngineImp\EngineImp.h">
       <Filter>EngineImp</Filter>
     </ClInclude>
+    <ClInclude Include="Modules\SceneTree\SceneTreeNode.h">
+      <Filter>SceneTree</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\SceneTree\SceneTree.h">
+      <Filter>SceneTree</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\SceneTree\SceneTreeInterface.h">
+      <Filter>SceneTree</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -172,6 +184,9 @@
     </ClCompile>
     <ClCompile Include="Modules\EngineImp\EngineImp.cpp">
       <Filter>EngineImp</Filter>
+    </ClCompile>
+    <ClCompile Include="Modules\SceneTree\SceneTree.cpp">
+      <Filter>SceneTree</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>
