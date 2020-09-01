@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <DirectXMath.h>
+#include <DirectXCollision.h>
 #include <list>
 /*
 	ËÄ²æÊ÷
@@ -16,8 +17,7 @@ namespace QuadTree
 
 	struct TreeNode
 	{
-		XMFLOAT3 Pos;
-		XMFLOAT3 AABB[AABB_Vertex_Count];
+		BoundingBox aabb;
 		std::list<TreeNode*> ChildNodes;
 		TreeNode* Parent;
 		std::list<RenderItem*> RenderItemsList;

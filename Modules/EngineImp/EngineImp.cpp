@@ -33,8 +33,14 @@ void CEngine::OnResize()
 
 void CEngine::Update(const GameTimer& gt)
 {
-	m_scene_tree->Culling(m_render_pipeline->GetCameraPos(), m_render_pipeline->GetCameraDir(), m_render_pipeline->GetCameraFrustum());
-
+	if (m_render_pipeline->IsCameraDirty())
+	{
+		m_render_pipeline->UpdateCamera(gt);
+		auto culling_res = m_scene_tree->Culling(m_render_pipeline->GetCameraFrustum());
+		m_render_pipeline->ClearVisibleRenderItems();
+		m_render_pipeline->PushVisibleModels((int)RenderLayer::Opaque, culling_res);
+	}
+	
 	m_render_pipeline->Update(gt);
 }
 

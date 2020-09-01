@@ -36,9 +36,12 @@ private:
 	void DrawWithZBuffer(const GameTimer& gt);
 	virtual std::vector<RenderItem*>& GetRenderItems(int layer);
 	virtual DirectX::XMFLOAT3 GetCameraPos();
-	virtual Frustum GetCameraFrustum();
+	virtual BoundingFrustum GetCameraFrustum() override;
 	virtual DirectX::XMFLOAT3 GetCameraDir();
-
+	virtual void ClearVisibleRenderItems();
+	virtual void PushVisibleModels(int layer, std::vector<RenderItem*>& render_items, bool add = false) override;
+	virtual bool IsCameraDirty() override;
+	virtual bool InitDirect3D() override;
 	void UpdateObjectCBs(const GameTimer& gt);
 	void UpdateMaterialBuffer(const GameTimer& gt);
 	void UpdateShadowTransform(const GameTimer& gt);

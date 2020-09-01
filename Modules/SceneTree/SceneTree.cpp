@@ -1,6 +1,7 @@
 #include "SceneTree.h"
 #include "SceneTreeNode.h"
 #include "../Common/RenderItems.h"
+#include "../Logger/LoggerWrapper.h"
 
 namespace QuadTree
 {
@@ -32,9 +33,14 @@ namespace QuadTree
 
 	}
 
-	void CQuadTree::Culling(const XMFLOAT3& camera_pos, const XMFLOAT3& camera_dir, const Frustum& frustum)
+	std::vector<RenderItem*> CQuadTree::Culling(const DirectX::BoundingFrustum& frustum)
 	{
-
+		std::vector<RenderItem*> res;
+		
+		//深度遍历把没剔除的子节点加入到最后要渲染的队列中
+		TreeNode* node = m_tree.get();
+		CullingNode(node, frustum, res);
+		return res;
 	}
 
 	void CQuadTree::InitSceneTreeLayers()
@@ -52,7 +58,10 @@ namespace QuadTree
 			{
 				SceneTreeGrid grid;
 				grid.Node = m_tree.get();
+				grid.Node->aabb.Center = XMFLOAT3(0, 0, 0);
+				grid.Node->aabb.Extents = XMFLOAT3(SceneSize/2, SceneSize/2, SceneSize/2);
 				layer.Grids[std::pair<int, int>(0, 0)] = grid;
+
 			}
 			m_tree_layers[i] = layer;
 		
@@ -147,7 +156,7 @@ namespace QuadTree
 		//把自己的节点加入
 		if (0 != m_tree_layers[depth].Grids[index].RenderItemsList.size())
 		{
-			auto cur_render_items = m_tree_layers[depth].Grids[index].RenderItemsList;
+			auto& cur_render_items = m_tree_layers[depth].Grids[index].RenderItemsList;
 			render_items.insert(render_items.end(), cur_render_items.begin(), cur_render_items.end());
 		}
 
@@ -185,9 +194,8 @@ namespace QuadTree
 
 		//空间位置相关
 		const auto& grid_size = m_tree_layers[depth].GridSize;
-		node->Pos = XMFLOAT3(index.first *  grid_size.x + grid_size.x/2,0,index.second * grid_size.y + grid_size.y/2);
-		node->AABB[0] = XMFLOAT3(-grid_size.x, 0, -grid_size.y);
-		node->AABB[1] = XMFLOAT3(grid_size.y, 0, grid_size.y);
+		node->aabb.Center = XMFLOAT3(index.first *  grid_size.x + grid_size.x/2 + -SceneSize/2, SceneSize/2,index.second * grid_size.y + grid_size.y/2 + -SceneSize/2);
+		node->aabb.Extents = XMFLOAT3(grid_size.x/2, SceneSize / 2, grid_size.y/2 );
 		return node;
 	}
 
@@ -208,6 +216,32 @@ namespace QuadTree
 		}
 		delete node;
 		node = NULL;
+	}
+
+	void CQuadTree::CullingNode(TreeNode* node, const DirectX::BoundingFrustum& frustum, std::vector<RenderItem*>& render_items)
+	{
+		//判断当前是否被剔除
+		auto status = frustum.Contains(node->aabb);
+		//LogDebug(" [Scene Tree Culling] culling res : {}", status);
+		if (DirectX::DISJOINT == status)
+		{
+			//LogDebug(" [Scene tree Culling] aabb : center - {} {} {}, extents - {} {} {}", node->aabb.Center.x, node->aabb.Center.y, node->aabb.Center.z, node->aabb.Extents.x, node->aabb.Extents.y, node->aabb.Extents.z);
+			return;
+		}
+
+		if (0 == node->ChildNodes.size())
+		{
+			//已经到了叶子节点
+			render_items.insert(render_items.end(), node->RenderItemsList.begin(), node->RenderItemsList.end());
+			return;
+		}
+
+		auto itr = node->ChildNodes.begin();
+		while (itr!=node->ChildNodes.end())
+		{
+			CullingNode(*itr, frustum, render_items);
+			itr++;
+		}
 	}
 
 	CQuadTree::~CQuadTree()

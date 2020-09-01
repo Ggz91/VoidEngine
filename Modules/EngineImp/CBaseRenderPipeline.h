@@ -12,6 +12,7 @@
 #include "../Common/d3dUtil.h"
 #include "../Common/GameTimer.h"
 #include "../Common/GeometryDefines.h"
+#include <DirectXCollision.h>
 
 // Link necessary d3d12 libraries.
 #pragma comment(lib,"d3dcompiler.lib")
@@ -37,8 +38,11 @@ public:
 	virtual void StrafeCamera(float dis) = 0;
 	virtual std::vector<RenderItem*>& GetRenderItems(int layer) = 0;
 	virtual DirectX::XMFLOAT3 GetCameraPos() = 0;
-	virtual Frustum GetCameraFrustum() = 0;
+	virtual DirectX::BoundingFrustum GetCameraFrustum() = 0;
 	virtual DirectX::XMFLOAT3 GetCameraDir() = 0;
+	virtual void ClearVisibleRenderItems() = 0;
+	virtual void PushVisibleModels(int layer, std::vector<RenderItem*>& render_items, bool add = false) = 0;
+	virtual bool IsCameraDirty() = 0;
 
 };
 
@@ -76,8 +80,11 @@ protected:
 	virtual void UpdateCamera(const GameTimer& gt) = 0;
 	virtual std::vector<RenderItem*>& GetRenderItems(int layer) = 0;
 	virtual DirectX::XMFLOAT3 GetCameraPos() = 0;
-	virtual Frustum GetCameraFrustum() = 0;
+	virtual DirectX::BoundingFrustum GetCameraFrustum() = 0;
 	virtual DirectX::XMFLOAT3 GetCameraDir() = 0;
+	virtual void ClearVisibleRenderItems() = 0;
+	virtual void PushVisibleModels(int layer, std::vector<RenderItem*>& render_items, bool add = false) = 0;
+	virtual bool IsCameraDirty() = 0;
 
 protected:
 

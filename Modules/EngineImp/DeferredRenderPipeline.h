@@ -37,8 +37,12 @@ private:
 	void DrawWithDeferredTexturing(const GameTimer& gt);
 	virtual std::vector<RenderItem*>& GetRenderItems(int layer);
 	virtual DirectX::XMFLOAT3 GetCameraPos();
-	virtual Frustum GetCameraFrustum();
+	virtual BoundingFrustum GetCameraFrustum() override;
 	virtual DirectX::XMFLOAT3 GetCameraDir();
+	virtual void ClearVisibleRenderItems();
+	virtual void PushVisibleModels(int layer, std::vector<RenderItem*>& render_items, bool add /* = false */) override;
+	virtual bool InitDirect3D() override;
+	virtual bool IsCameraDirty() override;
 
 	void UpdateObjectCBs(const GameTimer& gt);
 	void UpdateMaterialBuffer(const GameTimer& gt);
@@ -97,7 +101,7 @@ private:
 	std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout;
 
 	// List of all the render items.
-	std::vector<std::unique_ptr<RenderItem>> mAllRitems;
+	std::vector<RenderItem*> mAllRitems;
 
 	// Render items divided by PSO.
 	std::vector<RenderItem*> mRitemLayer[(int)RenderLayer::Count];

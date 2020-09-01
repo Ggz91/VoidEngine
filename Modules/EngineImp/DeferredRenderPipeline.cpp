@@ -36,15 +36,8 @@ bool CDeferredRenderPipeline::Initialize()
 	// Reset the command list to prep for initialization commands.
 	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
 
-	mCamera.SetPosition(0.0f, 500.0f, 1500.0f);
-	mCamera.LookAt(mCamera.GetPosition3f(), XMFLOAT3(0, 0, 0), XMFLOAT3(0, 1, 0));
-	mCamera.UpdateViewMatrix();
-
-	BuildRootSignature();
 	BuildDescriptorHeaps();
-	BuildShadersAndInputLayout();
 	BuildFrameResources();
-	BuildPSOs();
 
 
 	// Execute the initialization commands.
@@ -126,12 +119,12 @@ void CDeferredRenderPipeline::OnResize()
 	CBaseRenderPipeline::OnResize();
 
 	mCamera.SetLens(0.25f * MathHelper::Pi, AspectRatio(), 1.0f, 10000.0f);
-
+	mCamera.SetPosition(0.0f, 500.0f, 1500.0f);
+	mCamera.LookAt(mCamera.GetPosition3f(), XMFLOAT3(0, 0, 0), XMFLOAT3(0, 1, 0));
 }
 
 void CDeferredRenderPipeline::Update(const GameTimer& gt)
 {
-	mCamera.UpdateViewMatrix();
 	// Cycle through the circular frame resource array.
 	mCurrFrameResourceIndex = (mCurrFrameResourceIndex + 1) % gNumFrameResources;
 	mCurrFrameResource = mFrameResources[mCurrFrameResourceIndex].get();
@@ -172,6 +165,7 @@ void CDeferredRenderPipeline::Draw(const GameTimer& gt)
 
 void CDeferredRenderPipeline::UpdateCamera(const GameTimer& gt)
 {
+	mCamera.UpdateViewMatrix();
 }
 
 void CDeferredRenderPipeline::DrawWithDeferredTexturing(const GameTimer& gt)
@@ -226,15 +220,16 @@ DirectX::XMFLOAT3 CDeferredRenderPipeline::GetCameraPos()
 	return pos;
 }
 
-Frustum CDeferredRenderPipeline::GetCameraFrustum()
+BoundingFrustum CDeferredRenderPipeline::GetCameraFrustum()
 {
-	Frustum frustum;
-	frustum.Aspect = mCamera.GetAspect();
-	frustum.FarZ = mCamera.GetFarZ();
-	frustum.NearZ = mCamera.GetNearZ();
-	frustum.FovX = mCamera.GetFovX();
-	frustum.FovY = mCamera.GetFovY();
-	return frustum;
+	BoundingFrustum cam_frustum;
+	//view空间的视锥
+	BoundingFrustum::CreateFromMatrix(cam_frustum, mCamera.GetProj());
+	//需要转换到世界空间
+	XMMATRIX inv_view = XMMatrixInverse(&XMMatrixDeterminant(mCamera.GetView()), mCamera.GetView());
+	BoundingFrustum res;
+	cam_frustum.Transform(res, inv_view);
+	return res;
 }
 
 DirectX::XMFLOAT3 CDeferredRenderPipeline::GetCameraDir()
@@ -245,11 +240,59 @@ DirectX::XMFLOAT3 CDeferredRenderPipeline::GetCameraDir()
 	return dir;
 }
 
+void CDeferredRenderPipeline::ClearVisibleRenderItems()
+{
+	for (int i=0; i<(int)RenderLayer::Count; ++i)
+	{
+		mRitemLayer[i].clear();
+	}
+}
+
+void CDeferredRenderPipeline::PushVisibleModels(int layer, std::vector<RenderItem*>& render_items, bool add /* = false */)
+{
+	if (add)
+	{
+		mRitemLayer[layer].insert(mRitemLayer[layer].end(), render_items.begin(), render_items.end());
+	}
+	else
+	{
+		mRitemLayer[layer] = render_items;
+	}
+}
+
+bool CDeferredRenderPipeline::InitDirect3D()
+{
+	if (!CBaseRenderPipeline::InitDirect3D())
+	{
+		return false;
+	}
+
+	
+
+	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
+	BuildRootSignature();
+	BuildShadersAndInputLayout();
+	BuildPSOs();
+
+	ThrowIfFailed(mCommandList->Close());
+	ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
+	mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
+
+	FlushCommandQueue();
+	return true;
+}
+
+bool CDeferredRenderPipeline::IsCameraDirty()
+{
+	return mCamera.Dirty();
+}
+
 void CDeferredRenderPipeline::UpdateObjectCBs(const GameTimer& gt)
 {
 	auto currObjectCB = mCurrFrameResource->ObjectCB.get();
-	for (auto& e : mAllRitems)
+	for (int i=0; i<mAllRitems.size(); ++i)
 	{
+		auto& e = mAllRitems[i];
 		// Only update the cbuffer data if the constants have changed.  
 		// This needs to be tracked per frame resource.
 		if (e->NumFramesDirty > 0)
@@ -698,8 +741,8 @@ void CDeferredRenderPipeline::PushRenderItems(std::vector<RenderItem*>& render_i
 	
 	RenderItemUtil::FillGeoData(render_items, md3dDevice.Get(), mCommandList.Get());
 	
-	auto& opaque_items = mRitemLayer[(int)RenderLayer::Opaque];
-	opaque_items.insert(opaque_items.end(), render_items.begin(), render_items.end());
+// 	auto& opaque_items = mRitemLayer[(int)RenderLayer::Opaque];
+// 	opaque_items.insert(opaque_items.end(), render_items.begin(), render_items.end());
 
 	mAllRitems.insert(mAllRitems.end(), render_items.begin(), render_items.end());
 }
@@ -1023,7 +1066,7 @@ void CDeferredRenderPipeline::BuildDeferredShadingRootSignature()
 	gbuffer1_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
 
 	CD3DX12_DESCRIPTOR_RANGE tex_table;
-	tex_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, mTextures.size(), 2, 1);
+	tex_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 2, 1);
 
 
 	// Perfomance TIP: Order from most frequent to least frequent.
