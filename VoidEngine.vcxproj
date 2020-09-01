@@ -73,6 +73,8 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
     <OutDir>..\GPUDrivenRenderPipeline\Debug</OutDir>
+    <IncludePath>F:\learning\dx_project_demo\VoidEngine\Modules\Logger\;$(IncludePath)</IncludePath>
+    <LibraryPath>F:\learning\dx_project_demo\VoidEngine\InputDLL;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -88,7 +90,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_DEBUG;VOIDENGINE_EXPORTS;_WINDOWS;_USRDLL;__Engine_Export;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SPDLOG_COMPILED_LIB;WIN32;_DEBUG;VOIDENGINE_EXPORTS;_WINDOWS;_USRDLL;__Engine_Export;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
@@ -97,6 +99,7 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
+      <AdditionalDependencies>spdlogd.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /y /d ".\VoidEngineInterface.h" "$(OutDir)..\Interface\"
@@ -180,6 +183,94 @@ xcopy /y /d ".\Modules\Common" "$(OutDir)..\Modules\Common"</Command>
     <ClInclude Include="Modules\EngineImp\ZBufferRenderPipeline.h" />
     <ClInclude Include="Modules\EngineWrapperImp\EngineWrapperImp.h" />
     <ClInclude Include="Modules\FrameResource\FrameResource.h" />
+    <ClInclude Include="Modules\Logger\LoggerWrapper.h" />
+    <ClInclude Include="Modules\Logger\spdlog\async.h" />
+    <ClInclude Include="Modules\Logger\spdlog\async_logger-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\async_logger.h" />
+    <ClInclude Include="Modules\Logger\spdlog\cfg\argv.h" />
+    <ClInclude Include="Modules\Logger\spdlog\cfg\env.h" />
+    <ClInclude Include="Modules\Logger\spdlog\cfg\helpers-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\cfg\helpers.h" />
+    <ClInclude Include="Modules\Logger\spdlog\cfg\log_levels.h" />
+    <ClInclude Include="Modules\Logger\spdlog\common-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\common.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\backtracer-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\backtracer.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\circular_q.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\console_globals.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\file_helper-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\file_helper.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\fmt_helper.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\log_msg-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\log_msg.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\log_msg_buffer-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\log_msg_buffer.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\mpmc_blocking_q.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\null_mutex.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\os-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\os.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\periodic_worker-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\periodic_worker.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\registry-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\registry.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\synchronous_factory.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\tcp_client-windows.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\tcp_client.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\thread_pool-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\thread_pool.h" />
+    <ClInclude Include="Modules\Logger\spdlog\details\windows_include.h" />
+    <ClInclude Include="Modules\Logger\spdlog\fmt\bin_to_hex.h" />
+    <ClInclude Include="Modules\Logger\spdlog\fmt\bundled\chrono.h" />
+    <ClInclude Include="Modules\Logger\spdlog\fmt\bundled\color.h" />
+    <ClInclude Include="Modules\Logger\spdlog\fmt\bundled\compile.h" />
+    <ClInclude Include="Modules\Logger\spdlog\fmt\bundled\core.h" />
+    <ClInclude Include="Modules\Logger\spdlog\fmt\bundled\format-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\fmt\bundled\format.h" />
+    <ClInclude Include="Modules\Logger\spdlog\fmt\bundled\locale.h" />
+    <ClInclude Include="Modules\Logger\spdlog\fmt\bundled\ostream.h" />
+    <ClInclude Include="Modules\Logger\spdlog\fmt\bundled\posix.h" />
+    <ClInclude Include="Modules\Logger\spdlog\fmt\bundled\printf.h" />
+    <ClInclude Include="Modules\Logger\spdlog\fmt\bundled\ranges.h" />
+    <ClInclude Include="Modules\Logger\spdlog\fmt\fmt.h" />
+    <ClInclude Include="Modules\Logger\spdlog\fmt\ostr.h" />
+    <ClInclude Include="Modules\Logger\spdlog\formatter.h" />
+    <ClInclude Include="Modules\Logger\spdlog\fwd.h" />
+    <ClInclude Include="Modules\Logger\spdlog\logger-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\logger.h" />
+    <ClInclude Include="Modules\Logger\spdlog\pattern_formatter-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\pattern_formatter.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\android_sink.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\ansicolor_sink-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\ansicolor_sink.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\base_sink-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\base_sink.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\basic_file_sink-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\basic_file_sink.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\daily_file_sink.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\dist_sink.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\dup_filter_sink.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\msvc_sink.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\null_sink.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\ostream_sink.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\ringbuffer_sink.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\rotating_file_sink-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\rotating_file_sink.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\sink-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\sink.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\stdout_color_sinks-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\stdout_color_sinks.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\stdout_sinks-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\stdout_sinks.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\syslog_sink.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\systemd_sink.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\tcp_sink.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\wincolor_sink-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\wincolor_sink.h" />
+    <ClInclude Include="Modules\Logger\spdlog\sinks\win_eventlog_sink.h" />
+    <ClInclude Include="Modules\Logger\spdlog\spdlog-inl.h" />
+    <ClInclude Include="Modules\Logger\spdlog\spdlog.h" />
+    <ClInclude Include="Modules\Logger\spdlog\tweakme.h" />
+    <ClInclude Include="Modules\Logger\spdlog\version.h" />
     <ClInclude Include="Modules\RenderItemUtil\RenderItemUtil.h" />
     <ClInclude Include="Modules\SceneTree\SceneTree.h" />
     <ClInclude Include="Modules\SceneTree\SceneTreeInterface.h" />
@@ -203,6 +294,14 @@ xcopy /y /d ".\Modules\Common" "$(OutDir)..\Modules\Common"</Command>
     <ClCompile Include="Modules\EngineImp\ZBufferRenderPipeline.cpp" />
     <ClCompile Include="Modules\EngineWrapperImp\EngineWrapperImp.cpp" />
     <ClCompile Include="Modules\FrameResource\FrameResource.cpp" />
+    <ClCompile Include="Modules\Logger\LoggerWrapper.cpp" />
+    <ClCompile Include="Modules\Logger\spdlog\src\async.cpp" />
+    <ClCompile Include="Modules\Logger\spdlog\src\cfg.cpp" />
+    <ClCompile Include="Modules\Logger\spdlog\src\color_sinks.cpp" />
+    <ClCompile Include="Modules\Logger\spdlog\src\file_sinks.cpp" />
+    <ClCompile Include="Modules\Logger\spdlog\src\fmt.cpp" />
+    <ClCompile Include="Modules\Logger\spdlog\src\spdlog.cpp" />
+    <ClCompile Include="Modules\Logger\spdlog\src\stdout_sinks.cpp" />
     <ClCompile Include="Modules\RenderItemUtil\RenderItemUtil.cpp" />
     <ClCompile Include="Modules\SceneTree\SceneTree.cpp" />
     <ClCompile Include="Modules\ShadowMap\ShadowMap.cpp" />
