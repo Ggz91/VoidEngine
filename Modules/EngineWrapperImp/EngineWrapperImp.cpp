@@ -7,7 +7,7 @@ CEngineWrapper::CEngineWrapper(HINSTANCE h_instance, HWND h_wnd)
 	EngineInitParam param;
 	param.HInstance = h_instance;
 	param.HWnd = h_wnd;
-#if __ZBuffer_Rendering
+#ifdef __ZBuffer_Rendering
 	param.UseDeferredRendering = false;
 #else
 	param.UseDeferredRendering = true;
@@ -17,7 +17,7 @@ CEngineWrapper::CEngineWrapper(HINSTANCE h_instance, HWND h_wnd)
 
 CEngineWrapper::~CEngineWrapper()
 {
-	m_ptr_engine.release();
+
 }
 
 bool CEngineWrapper::Init3D()

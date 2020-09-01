@@ -4,6 +4,7 @@
 #include "CBaseRenderPipeline.h"
 
 class IRenderPipeline;
+class ISceneTree;
 
 struct EngineInitParam
 {
@@ -30,4 +31,5 @@ public:
 	virtual void StrafeCamera(float dis);
 private:
 	std::unique_ptr<IRenderPipeline> m_render_pipeline;
+	std::unique_ptr<ISceneTree> m_scene_tree;
 };

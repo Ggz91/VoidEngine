@@ -11,12 +11,14 @@
 
 #include "../Common/d3dUtil.h"
 #include "../Common/GameTimer.h"
-#include "../Common/RenderItems.h"
+#include "../Common/GeometryDefines.h"
+
 // Link necessary d3d12 libraries.
 #pragma comment(lib,"d3dcompiler.lib")
 #pragma comment(lib, "D3D12.lib")
 #pragma comment(lib, "dxgi.lib")
 
+struct RenderItem;
 
 class IRenderPipeline
 {
@@ -24,6 +26,7 @@ public:
 	virtual bool Initialize() = 0;
 	virtual void OnResize() = 0;
 	virtual void Update(const GameTimer& gt) = 0;
+	virtual void UpdateCamera(const GameTimer& gt) = 0;
 	virtual void Draw(const GameTimer& gt) = 0;
     virtual void PushModels(std::vector<RenderItem*>& render_items) = 0;
 	virtual bool InitDirect3D() = 0;
@@ -32,6 +35,11 @@ public:
 	virtual void RotateCameraY(float rad) = 0;
 	virtual void MoveCamera(float dis) = 0;
 	virtual void StrafeCamera(float dis) = 0;
+	virtual std::vector<RenderItem*>& GetRenderItems(int layer) = 0;
+	virtual DirectX::XMFLOAT3 GetCameraPos() = 0;
+	virtual Frustum GetCameraFrustum() = 0;
+	virtual DirectX::XMFLOAT3 GetCameraDir() = 0;
+
 };
 
 class CBaseRenderPipeline : public IRenderPipeline
@@ -65,8 +73,11 @@ protected:
 	virtual void OnResize(); 
 	virtual void Update(const GameTimer& gt)=0;
     virtual void Draw(const GameTimer& gt)=0;
-
-
+	virtual void UpdateCamera(const GameTimer& gt) = 0;
+	virtual std::vector<RenderItem*>& GetRenderItems(int layer) = 0;
+	virtual DirectX::XMFLOAT3 GetCameraPos() = 0;
+	virtual Frustum GetCameraFrustum() = 0;
+	virtual DirectX::XMFLOAT3 GetCameraDir() = 0;
 
 protected:
 

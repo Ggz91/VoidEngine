@@ -1,6 +1,7 @@
 #include "EngineImp.h"
 #include "DeferredRenderPipeline.h"
 #include "ZBufferRenderPipeline.h"
+#include "../SceneTree/SceneTree.h"
 
 CEngine::CEngine(EngineInitParam& init_param)
 {
@@ -12,15 +13,12 @@ CEngine::CEngine(EngineInitParam& init_param)
 	{
 		m_render_pipeline = std::make_unique<CZBufferRenderPipeline>(init_param.HInstance, init_param.HWnd);
 	}
+	m_scene_tree = std::make_unique<QuadTree::CQuadTree>();
 }
 
 CEngine::~CEngine()
 {
-	if (NULL != m_render_pipeline)
-	{
-		m_render_pipeline.release();
-		m_render_pipeline = NULL;
-	}
+
 }
 
 bool CEngine::Initialize()
@@ -35,6 +33,8 @@ void CEngine::OnResize()
 
 void CEngine::Update(const GameTimer& gt)
 {
+	m_scene_tree->Culling(m_render_pipeline->GetCameraPos(), m_render_pipeline->GetCameraDir(), m_render_pipeline->GetCameraFrustum());
+
 	m_render_pipeline->Update(gt);
 }
 
@@ -45,6 +45,7 @@ void CEngine::Draw(const GameTimer& gt)
 
 void CEngine::PushModels(std::vector<RenderItem*>& render_items)
 {
+	m_scene_tree->Init(render_items);
 	m_render_pipeline->PushModels(render_items);
 }
 

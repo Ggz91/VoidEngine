@@ -31,6 +31,7 @@ void RenderItemUtil::FillGeoData(std::vector<RenderItem*>& render_items, ID3D12D
 	geo->VertexBufferByteSize = v_byte_size;
 	geo->IndexFormat = DXGI_FORMAT_R16_UINT;
 	geo->IndexBufferByteSize = i_byte_size;
+
 }
 
 void RenderItemUtil::FillSingleGeoData(RenderItem* render_item, ID3D12Device* device,

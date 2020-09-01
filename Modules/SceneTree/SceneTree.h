@@ -10,7 +10,7 @@ namespace QuadTree
 	using namespace DirectX;
 
 	//限制场景大小
-	const float SceneSize = 2^15;
+	const float SceneSize = pow(2,15);
 	const int SceneTreeDepth = 10;
 
 	struct TreeNode;
@@ -38,6 +38,7 @@ namespace QuadTree
 		virtual void Init(std::vector<RenderItem*>& render_items) override;
 		virtual void Load(std::string& file) override;
 		virtual void Save(std::string& file) override;
+		virtual void Culling(const XMFLOAT3& camera_pos, const XMFLOAT3& camera_dir, const Frustum& frustum) override;
 	private:
 		std::unique_ptr<TreeNode> m_tree;
 
@@ -50,5 +51,6 @@ namespace QuadTree
 		TreeNode* GetParentTreeNode(const GridIndex& index, int depth);
 		void CollectRenderItems(const GridIndex& index, int depth , std::list<RenderItem*>& render_items);
 		TreeNode* CreateNode(const GridIndex& index, int depth);
+		void ReleaseNode(TreeNode* node);
 	};
 }

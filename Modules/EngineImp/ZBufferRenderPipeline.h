@@ -3,6 +3,7 @@
 #include "../Skin/SkinnedData.h"
 #include "../FrameResource/FrameResource.h"
 #include "../Common/Camera.h"
+#include "../Common/RenderItems.h"
 
 class ShadowMap;
 class Ssao;
@@ -31,8 +32,12 @@ private:
 	virtual void OnResize()override;
 	virtual void Update(const GameTimer& gt)override;
 	virtual void Draw(const GameTimer& gt)override;
-
+	virtual void UpdateCamera(const GameTimer& gt) override;
 	void DrawWithZBuffer(const GameTimer& gt);
+	virtual std::vector<RenderItem*>& GetRenderItems(int layer);
+	virtual DirectX::XMFLOAT3 GetCameraPos();
+	virtual Frustum GetCameraFrustum();
+	virtual DirectX::XMFLOAT3 GetCameraDir();
 
 	void UpdateObjectCBs(const GameTimer& gt);
 	void UpdateMaterialBuffer(const GameTimer& gt);

@@ -151,6 +151,10 @@ void CZBufferRenderPipeline::Draw(const GameTimer& gt)
 	DrawWithZBuffer(gt);
 }
 
+void CZBufferRenderPipeline::UpdateCamera(const GameTimer& gt)
+{
+}
+
 void CZBufferRenderPipeline::DrawWithZBuffer(const GameTimer& gt)
 {
 	auto cmdListAlloc = mCurrFrameResource->CmdListAlloc;
@@ -220,6 +224,37 @@ void CZBufferRenderPipeline::DrawWithZBuffer(const GameTimer& gt)
 	// Because we are on the GPU timeline, the new fence point won't be 
 	// set until the GPU finishes processing all the commands prior to this Signal().
 	mCommandQueue->Signal(mFence.Get(), mCurrentFence);
+}
+
+std::vector<RenderItem*>& CZBufferRenderPipeline::GetRenderItems(int layer)
+{
+	return mRitemLayer[layer];
+}
+
+DirectX::XMFLOAT3 CZBufferRenderPipeline::GetCameraPos()
+{
+	DirectX::XMFLOAT3 pos;
+	XMStoreFloat3(&pos, mCamera.GetPosition());
+	return pos;
+}
+
+Frustum CZBufferRenderPipeline::GetCameraFrustum()
+{
+	Frustum frustum;
+	frustum.Aspect = mCamera.GetAspect();
+	frustum.FarZ = mCamera.GetFarZ();
+	frustum.NearZ = mCamera.GetNearZ();
+	frustum.FovX = mCamera.GetFovX();
+	frustum.FovY = mCamera.GetFovY();
+	return frustum;
+}
+
+DirectX::XMFLOAT3 CZBufferRenderPipeline::GetCameraDir()
+{
+	DirectX::XMFLOAT3 dir;
+	auto vec_dir = mCamera.GetLook() - mCamera.GetPosition();
+	XMStoreFloat3(&dir, vec_dir);
+	return dir;
 }
 
 void CZBufferRenderPipeline::UpdateObjectCBs(const GameTimer& gt)

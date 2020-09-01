@@ -20,6 +20,7 @@ namespace QuadTree
 		XMFLOAT3 AABB[AABB_Vertex_Count];
 		std::list<TreeNode*> ChildNodes;
 		TreeNode* Parent;
+		std::list<RenderItem*> RenderItemsList;
 	};
 }
 

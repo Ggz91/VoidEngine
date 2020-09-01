@@ -170,6 +170,10 @@ void CDeferredRenderPipeline::Draw(const GameTimer& gt)
 	DrawWithDeferredTexturing(gt);
 }
 
+void CDeferredRenderPipeline::UpdateCamera(const GameTimer& gt)
+{
+}
+
 void CDeferredRenderPipeline::DrawWithDeferredTexturing(const GameTimer& gt)
 {
 	auto cmdListAlloc = mCurrFrameResource->CmdListAlloc;
@@ -208,6 +212,37 @@ void CDeferredRenderPipeline::DrawWithDeferredTexturing(const GameTimer& gt)
 	// Because we are on the GPU timeline, the new fence point won't be 
 	// set until the GPU finishes processing all the commands prior to this Signal().
 	mCommandQueue->Signal(mFence.Get(), mCurrentFence);
+}
+
+std::vector<RenderItem*>& CDeferredRenderPipeline::GetRenderItems(int layer)
+{
+	return mRitemLayer[layer];
+}
+
+DirectX::XMFLOAT3 CDeferredRenderPipeline::GetCameraPos()
+{
+	DirectX::XMFLOAT3 pos;
+	XMStoreFloat3(&pos, mCamera.GetPosition());
+	return pos;
+}
+
+Frustum CDeferredRenderPipeline::GetCameraFrustum()
+{
+	Frustum frustum;
+	frustum.Aspect = mCamera.GetAspect();
+	frustum.FarZ = mCamera.GetFarZ();
+	frustum.NearZ = mCamera.GetNearZ();
+	frustum.FovX = mCamera.GetFovX();
+	frustum.FovY = mCamera.GetFovY();
+	return frustum;
+}
+
+DirectX::XMFLOAT3 CDeferredRenderPipeline::GetCameraDir()
+{
+	DirectX::XMFLOAT3 dir;
+	auto vec_dir = mCamera.GetLook() - mCamera.GetPosition();
+	XMStoreFloat3(&dir, vec_dir);
+	return dir;
 }
 
 void CDeferredRenderPipeline::UpdateObjectCBs(const GameTimer& gt)
