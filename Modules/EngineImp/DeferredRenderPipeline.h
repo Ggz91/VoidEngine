@@ -4,6 +4,7 @@
 #include "../FrameResource/FrameResource.h"
 #include "../Common/Camera.h"
 #include "../Common/RenderItems.h"
+#include <queue>
 
 class ShadowMap;
 class Ssao;
@@ -44,13 +45,6 @@ private:
 	virtual bool InitDirect3D() override;
 	virtual bool IsCameraDirty() override;
 
-	void UpdateObjectCBs(const GameTimer& gt);
-	void UpdateMaterialBuffer(const GameTimer& gt);
-	void UpdateShadowTransform(const GameTimer& gt);
-	void UpdateMainPassCB(const GameTimer& gt);
-	void UpdateShadowPassCB(const GameTimer& gt);
-	void UpdateSsaoCB(const GameTimer& gt);
-
 	void BuildRootSignature();
 	void BuildDescriptorHeaps();
 	void BuildShadersAndInputLayout();
@@ -58,8 +52,6 @@ private:
 	void BuildDeferredPSO();
 	void BuildFrameResources();
 	void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems);
-	void DrawSceneToShadowMap();
-	void DrawNormalsAndDepth();
 	void PushRenderItems(std::vector<RenderItem*>& render_item);
 	void PushMats(std::vector<RenderItem*>& render_item);
 	CD3DX12_CPU_DESCRIPTOR_HANDLE GetCpuSrv(int index)const;
@@ -81,8 +73,8 @@ private:
 	void BuildDeferredShadingRootSignature();
 private:
 
-	std::vector<std::unique_ptr<FrameResource>> mFrameResources;
-	FrameResource* mCurrFrameResource = nullptr;
+	std::unique_ptr<FrameResource> mFrameResources;
+	FrameResourceOffset* mCurrFrameResource = nullptr;
 	int mCurrFrameResourceIndex = 0;
 
 	ComPtr<ID3D12RootSignature> mRootSignature = nullptr;
@@ -146,4 +138,15 @@ private:
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_g_buffer[gGbufferCount];
 	DXGI_FORMAT m_g_buffer_format[gGbufferCount];
+
+	std::queue<FrameResourceOffset> m_frame_res_offset;
+	void UpdateFrameResource(const GameTimer& gt);
+	bool CanFillFrameRes(UINT size);
+	void FreeMemToCompletedFrame(UINT64 frame_index);
+	void CopyFrameRescourceData(const GameTimer& gt, FrameResourceOffset& offset);
+	void CopyObjectCBData(UINT& begin_Index);
+	void CopyMatCBData();
+	void CopyPassCBData(const GameTimer& gt, UINT& begin_index);
+	UINT CalCurFrameContantsSize();
 };
+

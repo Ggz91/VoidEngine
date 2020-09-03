@@ -90,7 +90,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>__ZBuffer_Rendering;__Debug;SPDLOG_COMPILED_LIB;WIN32;_DEBUG;VOIDENGINE_EXPORTS;_WINDOWS;_USRDLL;__Engine_Export;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__Debug;SPDLOG_COMPILED_LIB;WIN32;_DEBUG;VOIDENGINE_EXPORTS;_WINDOWS;_USRDLL;__Engine_Export;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
@@ -271,13 +271,14 @@ xcopy /y /d ".\Modules\Common" "$(OutDir)..\Modules\Common"</Command>
     <ClInclude Include="Modules\Logger\spdlog\spdlog.h" />
     <ClInclude Include="Modules\Logger\spdlog\tweakme.h" />
     <ClInclude Include="Modules\Logger\spdlog\version.h" />
+    <ClInclude Include="Modules\Predefines\BufferPredefines.h" />
+    <ClInclude Include="Modules\Predefines\ScenePredefines.h" />
     <ClInclude Include="Modules\RenderItemUtil\RenderItemUtil.h" />
     <ClInclude Include="Modules\SceneTree\SceneTree.h" />
     <ClInclude Include="Modules\SceneTree\SceneTreeInterface.h" />
     <ClInclude Include="Modules\SceneTree\SceneTreeNode.h" />
     <ClInclude Include="Modules\ShadowMap\ShadowMap.h" />
     <ClInclude Include="Modules\Skin\SkinnedData.h" />
-    <ClInclude Include="Modules\SSAO\Ssao.h" />
     <ClInclude Include="VoidEngineInterface.h" />
   </ItemGroup>
   <ItemGroup>
@@ -306,7 +307,6 @@ xcopy /y /d ".\Modules\Common" "$(OutDir)..\Modules\Common"</Command>
     <ClCompile Include="Modules\SceneTree\SceneTree.cpp" />
     <ClCompile Include="Modules\ShadowMap\ShadowMap.cpp" />
     <ClCompile Include="Modules\Skin\SkinnedData.cpp" />
-    <ClCompile Include="Modules\SSAO\Ssao.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
