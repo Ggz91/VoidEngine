@@ -11,7 +11,7 @@ namespace QuadTree
 
 	//限制场景大小
 	const float SceneSize = pow(2,15);
-	const int SceneTreeDepth = 5;
+	const int SceneTreeDepth = 10;
 
 	struct TreeNode;
 
