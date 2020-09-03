@@ -1,4 +1,4 @@
-#include "ZBufferRenderPipeline.h"
+/*#include "ZBufferRenderPipeline.h"
 #include <iostream>
 
 #include "CBaseRenderPipeline.h"
@@ -262,7 +262,7 @@ void CZBufferRenderPipeline::ClearVisibleRenderItems()
 	}
 }
 
-void CZBufferRenderPipeline::PushVisibleModels(int layer, std::vector<RenderItem*>& render_items, bool add /*= false*/)
+void CZBufferRenderPipeline::PushVisibleModels(int layer, std::vector<RenderItem*>& render_items, bool add )
 {
 	if (add)
 	{
@@ -602,10 +602,7 @@ void CZBufferRenderPipeline::BuildFrameResources()
 {
 	for (int i = 0; i < gNumFrameResources; ++i)
 	{
-		mFrameResources.push_back(std::make_unique<FrameResource>(md3dDevice.Get(),
-			2, (UINT)mAllRitems.size(),
-			1,
-			(UINT)mMaterials.size()));
+		mFrameResources.push_back(std::make_unique<FrameResource>(md3dDevice.Get()));
 	}
 }
 
@@ -905,3 +902,4 @@ void CZBufferRenderPipeline::BuildZbufferRootSignature()
 		serializedRootSig->GetBufferSize(),
 		IID_PPV_ARGS(mRootSignature.GetAddressOf())));
 }
+*/

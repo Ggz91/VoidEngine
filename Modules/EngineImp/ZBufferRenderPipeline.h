@@ -1,4 +1,4 @@
-#pragma once
+/*#pragma once
 #include "../EngineImp/CBaseRenderPipeline.h"
 #include "../Skin/SkinnedData.h"
 #include "../FrameResource/FrameResource.h"
@@ -136,3 +136,4 @@ private:
 	XMFLOAT3 mRotatedLightDirections[3];
 
 };
+*/

@@ -8,6 +8,8 @@
 #include "../SSAO/Ssao.h"
 #include "../ShadowMap/ShadowMap.h"
 #include "../RenderItemUtil/RenderItemUtil.h"
+#include "../Predefines/BufferPredefines.h"
+#include "../Logger/LoggerWrapper.h"
 
 const int gNumFrameResources = 3;
 
@@ -125,24 +127,7 @@ void CDeferredRenderPipeline::OnResize()
 
 void CDeferredRenderPipeline::Update(const GameTimer& gt)
 {
-	// Cycle through the circular frame resource array.
-	mCurrFrameResourceIndex = (mCurrFrameResourceIndex + 1) % gNumFrameResources;
-	mCurrFrameResource = mFrameResources[mCurrFrameResourceIndex].get();
-
-	// Has the GPU finished processing the commands of the current frame resource?
-	// If not, wait until the GPU has completed commands up to this fence point.
-	if (mCurrFrameResource->Fence != 0 && mFence->GetCompletedValue() < mCurrFrameResource->Fence)
-	{
-		HANDLE eventHandle = CreateEventEx(nullptr, nullptr, CREATE_EVENT_MANUAL_RESET, EVENT_ALL_ACCESS);
-		ThrowIfFailed(mFence->SetEventOnCompletion(mCurrFrameResource->Fence, eventHandle));
-		WaitForSingleObject(eventHandle, INFINITE);
-		CloseHandle(eventHandle);
-	}
-
-	//
-	// Animate the lights (and hence shadows).
-	//
-
+	
 	mLightRotationAngle += 0.1f * gt.DeltaTime();
 
 	XMMATRIX R = XMMatrixRotationY(mLightRotationAngle);
@@ -153,9 +138,7 @@ void CDeferredRenderPipeline::Update(const GameTimer& gt)
 		XMStoreFloat3(&mRotatedLightDirections[i], lightDir);
 	}
 
-	UpdateObjectCBs(gt);
-	UpdateMaterialBuffer(gt);
-	UpdateMainPassCB(gt);
+	UpdateFrameResource(gt);
 }
 
 void CDeferredRenderPipeline::Draw(const GameTimer& gt)
@@ -170,7 +153,8 @@ void CDeferredRenderPipeline::UpdateCamera(const GameTimer& gt)
 
 void CDeferredRenderPipeline::DrawWithDeferredTexturing(const GameTimer& gt)
 {
-	auto cmdListAlloc = mCurrFrameResource->CmdListAlloc;
+	mCurrFrameResourceIndex = (mCurrFrameResourceIndex + 1) % MaxCommandAllocNum;
+	auto cmdListAlloc = mFrameResources->CmdListAlloc[mCurrFrameResourceIndex];
 
 	// Reuse the memory associated with command recording.
 	// We can only reset when the associated command lists have finished execution on the GPU.
@@ -200,7 +184,7 @@ void CDeferredRenderPipeline::DrawWithDeferredTexturing(const GameTimer& gt)
 	mCurrBackBuffer = (mCurrBackBuffer + 1) % SwapChainBufferCount;
 
 	// Advance the fence value to mark commands up to this fence point.
-	mCurrFrameResource->Fence = ++mCurrentFence;
+	m_frame_res_offset.back().Fence = ++mCurrentFence;
 
 	// Add an instruction to the command queue to set a new fence point. 
 	// Because we are on the GPU timeline, the new fence point won't be 
@@ -285,215 +269,6 @@ bool CDeferredRenderPipeline::InitDirect3D()
 bool CDeferredRenderPipeline::IsCameraDirty()
 {
 	return mCamera.Dirty();
-}
-
-void CDeferredRenderPipeline::UpdateObjectCBs(const GameTimer& gt)
-{
-	auto currObjectCB = mCurrFrameResource->ObjectCB.get();
-	for (int i=0; i<mAllRitems.size(); ++i)
-	{
-		auto& e = mAllRitems[i];
-		// Only update the cbuffer data if the constants have changed.  
-		// This needs to be tracked per frame resource.
-		if (e->NumFramesDirty > 0)
-		{
-			XMMATRIX world = XMLoadFloat4x4(&e->World);
-			XMMATRIX texTransform = XMLoadFloat4x4(&e->TexTransform);
-
-			ObjectConstants objConstants;
-			XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
-			XMStoreFloat4x4(&objConstants.TexTransform, XMMatrixTranspose(texTransform));
-			if (NULL != e->Mat)
-			{
-				objConstants.MaterialIndex = e->Mat->MatCBIndex;
-			}
-
-			currObjectCB->CopyData(e->ObjCBIndex, objConstants);
-
-			// Next FrameResource need to be updated too.
-			e->NumFramesDirty--;
-		}
-	}
-}
-
-void CDeferredRenderPipeline::UpdateMaterialBuffer(const GameTimer& gt)
-{
-	auto currMaterialBuffer = mCurrFrameResource->MaterialBuffer.get();
-	for (auto& e : mMaterials)
-	{
-		// Only update the cbuffer data if the constants have changed.  If the cbuffer
-		// data changes, it needs to be updated for each FrameResource.
-		Material* mat = e.second;
-		if (mat->NumFramesDirty > 0)
-		{
-			XMMATRIX matTransform = XMLoadFloat4x4(&mat->MatTransform);
-			
-			MatData matData;
-			matData.DiffuseAlbedo = mat->DiffuseAlbedo;
-			matData.FresnelR0 = mat->FresnelR0;
-			matData.Roughness = mat->Roughness;
-			XMStoreFloat4x4(&matData.MatTransform, XMMatrixTranspose(matTransform));
-			matData.DiffuseMapIndex = mat->DiffuseSrvHeapIndex;
-			matData.NormalMapIndex = mat->NormalSrvHeapIndex;
-
-			currMaterialBuffer->CopyData(mat->MatCBIndex, matData);
-
-			// Next FrameResource need to be updated too.
-			mat->NumFramesDirty--;
-		}
-	}
-}
-
-void CDeferredRenderPipeline::UpdateShadowTransform(const GameTimer& gt)
-{
-	// Only the first "main" light casts a shadow.
-	XMVECTOR lightDir = XMLoadFloat3(&mRotatedLightDirections[0]);
-	XMVECTOR lightPos = -2.0f * mSceneBounds.Radius * lightDir;
-	XMVECTOR targetPos = XMLoadFloat3(&mSceneBounds.Center);
-	XMVECTOR lightUp = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-	XMMATRIX lightView = XMMatrixLookAtLH(lightPos, targetPos, lightUp);
-
-	XMStoreFloat3(&mLightPosW, lightPos);
-
-	// Transform bounding sphere to light space.
-	XMFLOAT3 sphereCenterLS;
-	XMStoreFloat3(&sphereCenterLS, XMVector3TransformCoord(targetPos, lightView));
-
-	// Ortho frustum in light space encloses scene.
-	float l = sphereCenterLS.x - mSceneBounds.Radius;
-	float b = sphereCenterLS.y - mSceneBounds.Radius;
-	float n = sphereCenterLS.z - mSceneBounds.Radius;
-	float r = sphereCenterLS.x + mSceneBounds.Radius;
-	float t = sphereCenterLS.y + mSceneBounds.Radius;
-	float f = sphereCenterLS.z + mSceneBounds.Radius;
-
-	mLightNearZ = n;
-	mLightFarZ = f;
-	XMMATRIX lightProj = XMMatrixOrthographicOffCenterLH(l, r, b, t, n, f);
-
-	// Transform NDC space [-1,+1]^2 to texture space [0,1]^2
-	XMMATRIX T(
-		0.5f, 0.0f, 0.0f, 0.0f,
-		0.0f, -0.5f, 0.0f, 0.0f,
-		0.0f, 0.0f, 1.0f, 0.0f,
-		0.5f, 0.5f, 0.0f, 1.0f);
-
-	XMMATRIX S = lightView * lightProj * T;
-	XMStoreFloat4x4(&mLightView, lightView);
-	XMStoreFloat4x4(&mLightProj, lightProj);
-	XMStoreFloat4x4(&mShadowTransform, S);
-}
-
-void CDeferredRenderPipeline::UpdateMainPassCB(const GameTimer& gt)
-{
-	XMMATRIX view = mCamera.GetView();
-	XMMATRIX proj = mCamera.GetProj();
-
-	XMMATRIX viewProj = XMMatrixMultiply(view, proj);
-	XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(view), view);
-	XMMATRIX invProj = XMMatrixInverse(&XMMatrixDeterminant(proj), proj);
-	XMMATRIX invViewProj = XMMatrixInverse(&XMMatrixDeterminant(viewProj), viewProj);
-
-	// Transform NDC space [-1,+1]^2 to texture space [0,1]^2
-	XMMATRIX T(
-		0.5f, 0.0f, 0.0f, 0.0f,
-		0.0f, -0.5f, 0.0f, 0.0f,
-		0.0f, 0.0f, 1.0f, 0.0f,
-		0.5f, 0.5f, 0.0f, 1.0f);
-
-	XMMATRIX viewProjTex = XMMatrixMultiply(viewProj, T);
-	XMMATRIX shadowTransform = XMLoadFloat4x4(&mShadowTransform);
-
-	XMStoreFloat4x4(&mMainPassCB.View, XMMatrixTranspose(view));
-	XMStoreFloat4x4(&mMainPassCB.InvView, XMMatrixTranspose(invView));
-	XMStoreFloat4x4(&mMainPassCB.Proj, XMMatrixTranspose(proj));
-	XMStoreFloat4x4(&mMainPassCB.InvProj, XMMatrixTranspose(invProj));
-	XMStoreFloat4x4(&mMainPassCB.ViewProj, XMMatrixTranspose(viewProj));
-	XMStoreFloat4x4(&mMainPassCB.InvViewProj, XMMatrixTranspose(invViewProj));
-	XMStoreFloat4x4(&mMainPassCB.ViewProjTex, XMMatrixTranspose(viewProjTex));
-	XMStoreFloat4x4(&mMainPassCB.ShadowTransform, XMMatrixTranspose(shadowTransform));
-	mMainPassCB.EyePosW = mCamera.GetPosition3f();
-	mMainPassCB.RenderTargetSize = XMFLOAT2((float)mClientWidth, (float)mClientHeight);
-	mMainPassCB.InvRenderTargetSize = XMFLOAT2(1.0f / mClientWidth, 1.0f / mClientHeight);
-	mMainPassCB.NearZ = 1.0f;
-	mMainPassCB.FarZ = 1000.0f;
-	mMainPassCB.TotalTime = gt.TotalTime();
-	mMainPassCB.DeltaTime = gt.DeltaTime();
-	mMainPassCB.AmbientLight = { 0.25f, 0.25f, 0.35f, 1.0f };
-	mMainPassCB.Lights[0].Direction = mRotatedLightDirections[0];
-	mMainPassCB.Lights[0].Strength = { 0.9f, 0.9f, 0.7f };
-	mMainPassCB.Lights[1].Direction = mRotatedLightDirections[1];
-	mMainPassCB.Lights[1].Strength = { 0.4f, 0.4f, 0.4f };
-	mMainPassCB.Lights[2].Direction = mRotatedLightDirections[2];
-	mMainPassCB.Lights[2].Strength = { 0.2f, 0.2f, 0.2f };
-
-	auto currPassCB = mCurrFrameResource->PassCB.get();
-	currPassCB->CopyData(0, mMainPassCB);
-}
-
-void CDeferredRenderPipeline::UpdateShadowPassCB(const GameTimer& gt)
-{
-	XMMATRIX view = XMLoadFloat4x4(&mLightView);
-	XMMATRIX proj = XMLoadFloat4x4(&mLightProj);
-
-	XMMATRIX viewProj = XMMatrixMultiply(view, proj);
-	XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(view), view);
-	XMMATRIX invProj = XMMatrixInverse(&XMMatrixDeterminant(proj), proj);
-	XMMATRIX invViewProj = XMMatrixInverse(&XMMatrixDeterminant(viewProj), viewProj);
-
-	UINT w = mShadowMap->Width();
-	UINT h = mShadowMap->Height();
-
-	XMStoreFloat4x4(&mShadowPassCB.View, XMMatrixTranspose(view));
-	XMStoreFloat4x4(&mShadowPassCB.InvView, XMMatrixTranspose(invView));
-	XMStoreFloat4x4(&mShadowPassCB.Proj, XMMatrixTranspose(proj));
-	XMStoreFloat4x4(&mShadowPassCB.InvProj, XMMatrixTranspose(invProj));
-	XMStoreFloat4x4(&mShadowPassCB.ViewProj, XMMatrixTranspose(viewProj));
-	XMStoreFloat4x4(&mShadowPassCB.InvViewProj, XMMatrixTranspose(invViewProj));
-	mShadowPassCB.EyePosW = mLightPosW;
-	mShadowPassCB.RenderTargetSize = XMFLOAT2((float)w, (float)h);
-	mShadowPassCB.InvRenderTargetSize = XMFLOAT2(1.0f / w, 1.0f / h);
-	mShadowPassCB.NearZ = mLightNearZ;
-	mShadowPassCB.FarZ = mLightFarZ;
-
-	auto currPassCB = mCurrFrameResource->PassCB.get();
-	currPassCB->CopyData(1, mShadowPassCB);
-}
-
-void CDeferredRenderPipeline::UpdateSsaoCB(const GameTimer& gt)
-{
-	SsaoConstants ssaoCB;
-
-	XMMATRIX P = mCamera.GetProj();
-
-	// Transform NDC space [-1,+1]^2 to texture space [0,1]^2
-	XMMATRIX T(
-		0.5f, 0.0f, 0.0f, 0.0f,
-		0.0f, -0.5f, 0.0f, 0.0f,
-		0.0f, 0.0f, 1.0f, 0.0f,
-		0.5f, 0.5f, 0.0f, 1.0f);
-
-	ssaoCB.Proj = mMainPassCB.Proj;
-	ssaoCB.InvProj = mMainPassCB.InvProj;
-	XMStoreFloat4x4(&ssaoCB.ProjTex, XMMatrixTranspose(P * T));
-
-	mSsao->GetOffsetVectors(ssaoCB.OffsetVectors);
-
-	auto blurWeights = mSsao->CalcGaussWeights(2.5f);
-	ssaoCB.BlurWeights[0] = XMFLOAT4(&blurWeights[0]);
-	ssaoCB.BlurWeights[1] = XMFLOAT4(&blurWeights[4]);
-	ssaoCB.BlurWeights[2] = XMFLOAT4(&blurWeights[8]);
-
-	ssaoCB.InvRenderTargetSize = XMFLOAT2(1.0f / mSsao->SsaoMapWidth(), 1.0f / mSsao->SsaoMapHeight());
-
-	// Coordinates given in view space.
-	ssaoCB.OcclusionRadius = 0.5f;
-	ssaoCB.OcclusionFadeStart = 0.2f;
-	ssaoCB.OcclusionFadeEnd = 2.0f;
-	ssaoCB.SurfaceEpsilon = 0.05f;
-
-	auto currSsaoCB = mCurrFrameResource->SsaoCB.get();
-	currSsaoCB->CopyData(0, ssaoCB);
 }
 
 void CDeferredRenderPipeline::BuildRootSignature()
@@ -631,26 +406,20 @@ void CDeferredRenderPipeline::BuildDeferredPSO()
 
 void CDeferredRenderPipeline::BuildFrameResources()
 {
-	for (int i = 0; i < gNumFrameResources; ++i)
-	{
-		mFrameResources.push_back(std::make_unique<FrameResource>(md3dDevice.Get(),
-			2, (UINT)mAllRitems.size(),
-			1,
-			(UINT)mMaterials.size()));
-	}
+	mFrameResources = std::make_unique<FrameResource>(md3dDevice.Get(),  mMaterials.size());
 }
 
 void CDeferredRenderPipeline::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems)
 {
-	if (NULL == mCurrFrameResource->ObjectCB)
+	if (ritems.empty())
 	{
 		return;
 	}
 	UINT objCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
 	UINT skinnedCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(SkinnedConstants));
 
-	auto objectCB = mCurrFrameResource->ObjectCB->Resource();
-
+	auto objectCB = mFrameResources->FrameResCB->Resource();
+	UINT offset = m_frame_res_offset.back().ObjectBeginOffset;
 	// For each render item...
 	for (size_t i = 0; i < ritems.size(); ++i)
 	{
@@ -660,7 +429,8 @@ void CDeferredRenderPipeline::DrawRenderItems(ID3D12GraphicsCommandList* cmdList
 		cmdList->IASetIndexBuffer(&ri->Geo->IndexBufferView());
 		cmdList->IASetPrimitiveTopology(ri->PrimitiveType);
 
-		D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress() + ri->ObjCBIndex * objCBByteSize;
+		UINT object_offset = (offset + i * objCBByteSize) % mFrameResources->Size();
+		D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress() + object_offset;
 
 		cmdList->SetGraphicsRootConstantBufferView(0, objCBAddress);
 
@@ -668,77 +438,8 @@ void CDeferredRenderPipeline::DrawRenderItems(ID3D12GraphicsCommandList* cmdList
 	}
 }
 
-void CDeferredRenderPipeline::DrawSceneToShadowMap()
-{
-	mCommandList->RSSetViewports(1, &mShadowMap->Viewport());
-	mCommandList->RSSetScissorRects(1, &mShadowMap->ScissorRect());
-
-	// Change to DEPTH_WRITE.
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mShadowMap->Resource(),
-		D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE));
-
-	// Clear the back buffer and depth buffer.
-	mCommandList->ClearDepthStencilView(mShadowMap->Dsv(),
-		D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
-
-	// Specify the buffers we are going to render to.
-	mCommandList->OMSetRenderTargets(0, nullptr, false, &mShadowMap->Dsv());
-
-	// Bind the pass constant buffer for the shadow map pass.
-	UINT passCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(PassConstants));
-	auto passCB = mCurrFrameResource->PassCB->Resource();
-	D3D12_GPU_VIRTUAL_ADDRESS passCBAddress = passCB->GetGPUVirtualAddress() + 1 * passCBByteSize;
-	mCommandList->SetGraphicsRootConstantBufferView(2, passCBAddress);
-
-	mCommandList->SetPipelineState(mPSOs["shadow_opaque"].Get());
-	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
-
-	mCommandList->SetPipelineState(mPSOs["skinnedShadow_opaque"].Get());
-	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::SkinnedOpaque]);
-
-	// Change back to GENERIC_READ so we can read the texture in a shader.
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mShadowMap->Resource(),
-		D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ));
-}
-
-void CDeferredRenderPipeline::DrawNormalsAndDepth()
-{
-	mCommandList->RSSetViewports(1, &mScreenViewport);
-	mCommandList->RSSetScissorRects(1, &mScissorRect);
-
-	auto normalMap = mSsao->NormalMap();
-	auto normalMapRtv = mSsao->NormalMapRtv();
-
-	// Change to RENDER_TARGET.
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(normalMap,
-		D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET));
-
-	// Clear the screen normal map and depth buffer.
-	float clearValue[] = { 0.0f, 0.0f, 1.0f, 0.0f };
-	mCommandList->ClearRenderTargetView(normalMapRtv, clearValue, 0, nullptr);
-	mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
-
-	// Specify the buffers we are going to render to.
-	mCommandList->OMSetRenderTargets(1, &normalMapRtv, true, &DepthStencilView());
-
-	// Bind the constant buffer for this pass.
-	auto passCB = mCurrFrameResource->PassCB->Resource();
-	mCommandList->SetGraphicsRootConstantBufferView(2, passCB->GetGPUVirtualAddress());
-
-	mCommandList->SetPipelineState(mPSOs["drawNormals"].Get());
-	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
-
-	mCommandList->SetPipelineState(mPSOs["skinnedDrawNormals"].Get());
-	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::SkinnedOpaque]);
-
-	// Change back to GENERIC_READ so we can read the texture in a shader.
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(normalMap,
-		D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ));
-}
-
 void CDeferredRenderPipeline::PushRenderItems(std::vector<RenderItem*>& render_items)
 {
-	
 	RenderItemUtil::FillGeoData(render_items, md3dDevice.Get(), mCommandList.Get());
 	
 // 	auto& opaque_items = mRitemLayer[(int)RenderLayer::Opaque];
@@ -957,8 +658,9 @@ void CDeferredRenderPipeline::DeferredDrawFillGBufferPass()
 		true,
 		&DepthStencilView());
 	mCommandList->OMSetStencilRef(1);
-	auto passCB = mCurrFrameResource->PassCB->Resource();
-	mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress());
+	auto passCB = mFrameResources->FrameResCB->Resource();
+	UINT pass_offset = m_frame_res_offset.back().PassBeginOffset;
+	mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress() + pass_offset);
 
 	mCommandList->SetPipelineState(mPSOs["DeferredGS"].Get());
 	// Bind all the materials used in this scene.  For structured buffers, we can bypass the heap and 
@@ -989,15 +691,17 @@ void CDeferredRenderPipeline::DeferredDrawShadingPass()
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
 	mCommandList->SetGraphicsRootSignature(m_deferred_shading_root_signature.Get());
 	mCommandList->SetPipelineState(mPSOs["DeferredShading"].Get());
-	mCommandList->SetGraphicsRootConstantBufferView(0, mCurrFrameResource->PassCB->Resource()->GetGPUVirtualAddress());
+	UINT pass_offset = m_frame_res_offset.back().PassBeginOffset;
+	mCommandList->SetGraphicsRootConstantBufferView(0, mFrameResources->FrameResCB->Resource()->GetGPUVirtualAddress() + pass_offset);
 	CD3DX12_GPU_DESCRIPTOR_HANDLE h_des(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 	mCommandList->SetGraphicsRootDescriptorTable(1, h_des.Offset(mTextures.size(), mCbvSrvUavDescriptorSize));
 	mCommandList->SetGraphicsRootDescriptorTable(2, h_des.Offset(1, mCbvSrvUavDescriptorSize));
-	if (NULL != mCurrFrameResource->MaterialBuffer)
+	if (NULL != mFrameResources->MatCB)
 	{
-		auto matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
+		auto matBuffer = mFrameResources->MatCB->Resource();
 		mCommandList->SetGraphicsRootShaderResourceView(3, matBuffer->GetGPUVirtualAddress());
 	}
+	
 	if (0 != mTextures.size())
 	{
 		mCommandList->SetGraphicsRootDescriptorTable(4, mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
@@ -1100,5 +804,204 @@ void CDeferredRenderPipeline::BuildDeferredShadingRootSignature()
 		serializedRootSig->GetBufferPointer(),
 		serializedRootSig->GetBufferSize(),
 		IID_PPV_ARGS(m_deferred_shading_root_signature.GetAddressOf())));
+}
+
+void CDeferredRenderPipeline::UpdateFrameResource(const GameTimer& gt)
+{
+	
+	//填充数据到frame res offset queue中
+	UINT contants_size = CalCurFrameContantsSize();
+	if (!CanFillFrameRes(contants_size) || (m_frame_res_offset.size() >= MaxCommandAllocNum))
+	{
+		//不能填充数据或者命令队列不够用
+		UINT64 completed_frame_index = mFence->GetCompletedValue();
+		FreeMemToCompletedFrame(completed_frame_index);
+		if (!m_frame_res_offset.empty())
+		{
+			auto cur_frame_resource = &m_frame_res_offset.back();
+			while (!CanFillFrameRes(contants_size) || (m_frame_res_offset.size() >= MaxCommandAllocNum))
+			{
+				if (cur_frame_resource->Fence != 0 && mFence->GetCompletedValue() < cur_frame_resource->Fence)
+				{
+					HANDLE eventHandle = CreateEventEx(nullptr, nullptr, CREATE_EVENT_MANUAL_RESET, EVENT_ALL_ACCESS);
+					ThrowIfFailed(mFence->SetEventOnCompletion(cur_frame_resource->Fence, eventHandle));
+					WaitForSingleObject(eventHandle, INFINITE);
+					CloseHandle(eventHandle);
+				}
+				FreeMemToCompletedFrame(mFence->GetCompletedValue());
+			}
+		}
+	}
+	//LogDebug(" [Fill Frame Resource] size {} ", m_frame_res_offset.size());
+	//压入队列
+	FrameResourceOffset  offset;
+	offset.Fence = mCurrentFence;
+
+	//copy data
+	CopyFrameRescourceData(gt, offset);
+
+	offset.EndResOffset = m_frame_res_offset.empty() ? contants_size : m_frame_res_offset.back().EndResOffset + contants_size;
+	offset.EndResOffset %= mFrameResources->Size();
+	offset.Size = contants_size;
+	m_frame_res_offset.push(offset);
+
+	
+}
+
+bool CDeferredRenderPipeline::CanFillFrameRes(UINT size)
+{
+	if (m_frame_res_offset.empty())
+	{
+		return true;
+	}
+
+	if (m_frame_res_offset.back().EndResOffset + size < mFrameResources->Size())
+	{
+		return true;
+	}
+
+	int extra_size = size - m_frame_res_offset.back().EndResOffset;
+
+	if (extra_size <= m_frame_res_offset.front().ObjectBeginOffset)
+	{
+		return true;
+	}
+	return false;
+}
+
+void CDeferredRenderPipeline::FreeMemToCompletedFrame(UINT64 frame_index)
+{
+	while (!m_frame_res_offset.empty() && m_frame_res_offset.front().Fence <= frame_index)
+	{
+		m_frame_res_offset.pop();
+	}
+}
+
+void CDeferredRenderPipeline::CopyFrameRescourceData(const GameTimer& gt, FrameResourceOffset& offset)
+{
+	CopyMatCBData();
+
+	UINT begin_index = m_frame_res_offset.empty() ? 0 : m_frame_res_offset.back().EndResOffset;
+
+	offset.ObjectBeginOffset = begin_index;
+	CopyObjectCBData(begin_index);
+
+	offset.PassBeginOffset = begin_index;
+	CopyPassCBData(gt,begin_index);
+}
+
+void CDeferredRenderPipeline::CopyObjectCBData(UINT& begin_index)
+{
+	UINT objCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
+	auto currObjectCB = mFrameResources->FrameResCB.get();
+	for (int i = 0; i < mRitemLayer[(int)RenderLayer::Opaque].size(); ++i)
+	{
+		auto& e = mRitemLayer[(int)RenderLayer::Opaque][i];
+		//if (e->NumFramesDirty > 0)
+		{
+			XMMATRIX world = XMLoadFloat4x4(&e->World);
+			XMMATRIX texTransform = XMLoadFloat4x4(&e->TexTransform);
+
+			ObjectConstants objConstants;
+			XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
+			XMStoreFloat4x4(&objConstants.TexTransform, XMMatrixTranspose(texTransform));
+			if (NULL != e->Mat)
+			{
+				objConstants.MaterialIndex = e->Mat->MatCBIndex;
+			}
+			
+			currObjectCB->CopyData(begin_index / UploadBufferChunkSize, &objConstants, objCBByteSize / UploadBufferChunkSize);
+
+			e->NumFramesDirty--;
+		}
+		if ((mAllRitems.size()-1) != i)
+		{
+			begin_index += objCBByteSize;
+			begin_index %= mFrameResources->Size();
+		}
+	}
+}
+
+void CDeferredRenderPipeline::CopyMatCBData()
+{
+	UINT matCBByteSize = sizeof(MatData);
+	auto currMaterialBuffer = mFrameResources->MatCB.get();
+	const auto& end_itr = *mMaterials.cbegin();
+	for (auto& e : mMaterials)
+	{
+		Material* mat = e.second;
+		if (mat->NumFramesDirty > 0)
+		{
+			XMMATRIX matTransform = XMLoadFloat4x4(&mat->MatTransform);
+
+			MatData matData;
+			matData.DiffuseAlbedo = mat->DiffuseAlbedo;
+			matData.FresnelR0 = mat->FresnelR0;
+			matData.Roughness = mat->Roughness;
+			XMStoreFloat4x4(&matData.MatTransform, XMMatrixTranspose(matTransform));
+			matData.DiffuseMapIndex = mat->DiffuseSrvHeapIndex;
+			matData.NormalMapIndex = mat->NormalSrvHeapIndex;
+			
+			
+			currMaterialBuffer->CopyData(mat->MatCBIndex, &matData, 1);
+
+			mat->NumFramesDirty--;
+		}
+	}
+}
+
+void CDeferredRenderPipeline::CopyPassCBData(const GameTimer& gt, UINT& begin_index)
+{
+	XMMATRIX view = mCamera.GetView();
+	XMMATRIX proj = mCamera.GetProj();
+
+	XMMATRIX viewProj = XMMatrixMultiply(view, proj);
+	XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(view), view);
+	XMMATRIX invProj = XMMatrixInverse(&XMMatrixDeterminant(proj), proj);
+	XMMATRIX invViewProj = XMMatrixInverse(&XMMatrixDeterminant(viewProj), viewProj);
+
+	// Transform NDC space [-1,+1]^2 to texture space [0,1]^2
+	XMMATRIX T(
+		0.5f, 0.0f, 0.0f, 0.0f,
+		0.0f, -0.5f, 0.0f, 0.0f,
+		0.0f, 0.0f, 1.0f, 0.0f,
+		0.5f, 0.5f, 0.0f, 1.0f);
+
+	XMMATRIX viewProjTex = XMMatrixMultiply(viewProj, T);
+	XMMATRIX shadowTransform = XMLoadFloat4x4(&mShadowTransform);
+
+	XMStoreFloat4x4(&mMainPassCB.View, XMMatrixTranspose(view));
+	XMStoreFloat4x4(&mMainPassCB.InvView, XMMatrixTranspose(invView));
+	XMStoreFloat4x4(&mMainPassCB.Proj, XMMatrixTranspose(proj));
+	XMStoreFloat4x4(&mMainPassCB.InvProj, XMMatrixTranspose(invProj));
+	XMStoreFloat4x4(&mMainPassCB.ViewProj, XMMatrixTranspose(viewProj));
+	XMStoreFloat4x4(&mMainPassCB.InvViewProj, XMMatrixTranspose(invViewProj));
+	XMStoreFloat4x4(&mMainPassCB.ViewProjTex, XMMatrixTranspose(viewProjTex));
+	XMStoreFloat4x4(&mMainPassCB.ShadowTransform, XMMatrixTranspose(shadowTransform));
+	mMainPassCB.EyePosW = mCamera.GetPosition3f();
+	mMainPassCB.RenderTargetSize = XMFLOAT2((float)mClientWidth, (float)mClientHeight);
+	mMainPassCB.InvRenderTargetSize = XMFLOAT2(1.0f / mClientWidth, 1.0f / mClientHeight);
+	mMainPassCB.NearZ = 1.0f;
+	mMainPassCB.FarZ = 1000.0f;
+	mMainPassCB.TotalTime = gt.TotalTime();
+	mMainPassCB.DeltaTime = gt.DeltaTime();
+	mMainPassCB.AmbientLight = { 0.25f, 0.25f, 0.35f, 1.0f };
+	mMainPassCB.Lights[0].Direction = mRotatedLightDirections[0];
+	mMainPassCB.Lights[0].Strength = { 0.9f, 0.9f, 0.7f };
+	mMainPassCB.Lights[1].Direction = mRotatedLightDirections[1];
+	mMainPassCB.Lights[1].Strength = { 0.4f, 0.4f, 0.4f };
+	mMainPassCB.Lights[2].Direction = mRotatedLightDirections[2];
+	mMainPassCB.Lights[2].Strength = { 0.2f, 0.2f, 0.2f };
+
+	auto currPassCB = mFrameResources->FrameResCB.get();
+	currPassCB->CopyData(begin_index / UploadBufferChunkSize, &mMainPassCB, d3dUtil::CalcConstantBufferByteSize(sizeof(PassConstants)) / UploadBufferChunkSize);
+}
+
+UINT CDeferredRenderPipeline::CalCurFrameContantsSize()
+{
+	UINT object_size = mRitemLayer[(int)RenderLayer::Opaque].size() * d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
+	UINT pass_size = d3dUtil::CalcConstantBufferByteSize(sizeof(PassConstants));
+
+	return object_size + pass_size;
 }
 

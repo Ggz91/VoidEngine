@@ -22,9 +22,6 @@
     <Filter Include="ShadowMap">
       <UniqueIdentifier>{1af95e25-6156-4111-91a6-9d30a0612956}</UniqueIdentifier>
     </Filter>
-    <Filter Include="SSAO">
-      <UniqueIdentifier>{5128cee6-aff9-416b-808a-200c40ddf002}</UniqueIdentifier>
-    </Filter>
     <Filter Include="FrameResource">
       <UniqueIdentifier>{f115a793-65b8-41aa-81df-5a42a0ef4fce}</UniqueIdentifier>
     </Filter>
@@ -43,6 +40,9 @@
     <Filter Include="Logger">
       <UniqueIdentifier>{b7c046a6-9da9-458d-9fa1-5c80bc31a27f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Predefines">
+      <UniqueIdentifier>{17b7b082-d0da-4437-bd93-f7e1e008369c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="framework.h">
@@ -53,9 +53,6 @@
     </ClInclude>
     <ClInclude Include="Modules\Skin\SkinnedData.h">
       <Filter>Skin</Filter>
-    </ClInclude>
-    <ClInclude Include="Modules\SSAO\Ssao.h">
-      <Filter>SSAO</Filter>
     </ClInclude>
     <ClInclude Include="Modules\FrameResource\FrameResource.h">
       <Filter>FrameResource</Filter>
@@ -393,6 +390,12 @@
     <ClInclude Include="Modules\Logger\spdlog\version.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="Modules\Predefines\ScenePredefines.h">
+      <Filter>Predefines</Filter>
+    </ClInclude>
+    <ClInclude Include="Modules\Predefines\BufferPredefines.h">
+      <Filter>Predefines</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -409,9 +412,6 @@
     </ClCompile>
     <ClCompile Include="Modules\Skin\SkinnedData.cpp">
       <Filter>Skin</Filter>
-    </ClCompile>
-    <ClCompile Include="Modules\SSAO\Ssao.cpp">
-      <Filter>SSAO</Filter>
     </ClCompile>
     <ClCompile Include="Modules\EngineWrapperImp\EngineWrapperImp.cpp">
       <Filter>EgineWrapper</Filter>
