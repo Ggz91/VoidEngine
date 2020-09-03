@@ -95,8 +95,9 @@ void CDeferredRenderPipeline::StrafeCamera(float dis)
 void CDeferredRenderPipeline::CreateRtvAndDsvDescriptorHeaps()
 {
 	//+2 for G-Buffers
+	//+1 for Hi-Z buffers array
 	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc;
-	rtvHeapDesc.NumDescriptors = SwapChainBufferCount + GBufferSize();
+	rtvHeapDesc.NumDescriptors = SwapChainBufferCount + GBufferSize() + 1;
 	rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
 	rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 	rtvHeapDesc.NodeMask = 0;
@@ -114,6 +115,9 @@ void CDeferredRenderPipeline::CreateRtvAndDsvDescriptorHeaps()
 
 	//G-buffer
 	CreateGBufferRTV();
+
+	//Hi-Z
+	CreateHiZBuffer();
 }
 
 void CDeferredRenderPipeline::OnResize()
@@ -168,7 +172,8 @@ void CDeferredRenderPipeline::DrawWithDeferredTexturing(const GameTimer& gt)
 
 	ID3D12DescriptorHeap* descriptorHeaps[] = { mSrvDescriptorHeap.Get() };
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
-
+	
+	HiZPass();
 	DeferredDrawFillGBufferPass();
 	DeferredDrawShadingPass();
 
@@ -274,13 +279,14 @@ bool CDeferredRenderPipeline::IsCameraDirty()
 void CDeferredRenderPipeline::BuildRootSignature()
 {
 	BuildDeferredRootSignature();
+	BuildHiZRootSignature();
 }
 
 void CDeferredRenderPipeline::BuildDescriptorHeaps()
 {
 	//+2 for g-buffers
 	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-	srvHeapDesc.NumDescriptors = mTextures.size()+GBufferSize();
+	srvHeapDesc.NumDescriptors = mTextures.size()+GBufferSize() + 1;
 	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
@@ -317,6 +323,19 @@ void CDeferredRenderPipeline::BuildDescriptorHeaps()
 		gbuffer_srv_desc.Texture2D.ResourceMinLODClamp = 0;
 		md3dDevice->CreateShaderResourceView(m_g_buffer[i].Get(), &gbuffer_srv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mTextures.size()+i, mCbvSrvUavDescriptorSize));
 	}
+
+	//+1 for Hi-Z
+	D3D12_SHADER_RESOURCE_VIEW_DESC hiz_srv_desc = {};
+	hiz_srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	hiz_srv_desc.Format = m_hiz_buffer_format;
+	hiz_srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+	hiz_srv_desc.Texture2DArray.MipLevels = 1;
+	hiz_srv_desc.Texture2DArray.MostDetailedMip = 0;
+	hiz_srv_desc.Texture2DArray.PlaneSlice = 0;
+	hiz_srv_desc.Texture2DArray.ResourceMinLODClamp = 0;
+	hiz_srv_desc.Texture2DArray.ArraySize = log2(mClientWidth/ HiZBufferMinSize);
+	hiz_srv_desc.Texture2DArray.FirstArraySlice = 0;
+	md3dDevice->CreateShaderResourceView(m_hiz_buffer.Get(), &hiz_srv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mTextures.size() + GBufferSize(), mCbvSrvUavDescriptorSize));
 }
 
 void CDeferredRenderPipeline::BuildShadersAndInputLayout()
@@ -325,6 +344,8 @@ void CDeferredRenderPipeline::BuildShadersAndInputLayout()
 	mShaders["DeferredGSPS"] = d3dUtil::CompileShader(L".\\Shaders\\DeferredGSShader.hlsl", nullptr, "DeferredGSPS", "ps_5_1");
 	mShaders["DeferredShadingVS"] = d3dUtil::CompileShader(L".\\Shaders\\DeferredShadingShader.hlsl", nullptr, "ShadingVS", "vs_5_1");
 	mShaders["DeferredShadingPS"] = d3dUtil::CompileShader(L".\\Shaders\\DeferredShadingShader.hlsl", nullptr, "ShadingPS", "ps_5_1");
+	mShaders["HiZVS"] = d3dUtil::CompileShader(L".\\Shaders\\Depth.hlsl", nullptr, "DepthVS", "vs_5_1");
+	mShaders["HiZPS"] = d3dUtil::CompileShader(L".\\Shaders\\Depth.hlsl", nullptr, "DepthPS", "ps_5_1");
 
 	mInputLayout =
 	{
@@ -339,6 +360,7 @@ void CDeferredRenderPipeline::BuildShadersAndInputLayout()
 void CDeferredRenderPipeline::BuildPSOs()
 {
 	BuildDeferredPSO();
+	BuildHiZPSO();
 }
 
 void CDeferredRenderPipeline::BuildDeferredPSO()
@@ -409,7 +431,7 @@ void CDeferredRenderPipeline::BuildFrameResources()
 	mFrameResources = std::make_unique<FrameResource>(md3dDevice.Get(),  mMaterials.size());
 }
 
-void CDeferredRenderPipeline::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems)
+void CDeferredRenderPipeline::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems, int layer)
 {
 	if (ritems.empty())
 	{
@@ -419,7 +441,7 @@ void CDeferredRenderPipeline::DrawRenderItems(ID3D12GraphicsCommandList* cmdList
 	UINT skinnedCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(SkinnedConstants));
 
 	auto objectCB = mFrameResources->FrameResCB->Resource();
-	UINT offset = m_frame_res_offset.back().ObjectBeginOffset;
+	UINT offset = m_frame_res_offset.back().ObjectBeginOffset + GetRenderLayerObjectOffset(layer);
 	// For each render item...
 	for (size_t i = 0; i < ritems.size(); ++i)
 	{
@@ -666,7 +688,7 @@ void CDeferredRenderPipeline::DeferredDrawFillGBufferPass()
 	// Bind all the materials used in this scene.  For structured buffers, we can bypass the heap and 
 	// set as a root descriptor.
 
-	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
+	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque], (int) RenderLayer::Opaque);
 
 	for (int i = 0; i < GBufferSize(); ++i)
 	{
@@ -894,9 +916,13 @@ void CDeferredRenderPipeline::CopyObjectCBData(UINT& begin_index)
 {
 	UINT objCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
 	auto currObjectCB = mFrameResources->FrameResCB.get();
-	for (int i = 0; i < mRitemLayer[(int)RenderLayer::Opaque].size(); ++i)
+	std::vector<RenderItem*> all_visible_objects;
+	all_visible_objects.insert(all_visible_objects.end(), mRitemLayer[(int)RenderLayer::Occluder].begin(), mRitemLayer[(int)RenderLayer::Occluder].end());
+	all_visible_objects.insert(all_visible_objects.end(), mRitemLayer[(int)RenderLayer::Opaque].begin(), mRitemLayer[(int)RenderLayer::Opaque].end());
+
+	for (int i = 0; i < all_visible_objects.size(); ++i)
 	{
-		auto& e = mRitemLayer[(int)RenderLayer::Opaque][i];
+		auto& e = all_visible_objects[i];
 		//if (e->NumFramesDirty > 0)
 		{
 			XMMATRIX world = XMLoadFloat4x4(&e->World);
@@ -1003,5 +1029,136 @@ UINT CDeferredRenderPipeline::CalCurFrameContantsSize()
 	UINT pass_size = d3dUtil::CalcConstantBufferByteSize(sizeof(PassConstants));
 
 	return object_size + pass_size;
+}
+
+void CDeferredRenderPipeline::HiZPass()
+{
+	if (mRitemLayer[(int)RenderLayer::Occluder].empty())
+	{
+		return;
+	}
+
+	//1、生成全屏的depth
+	GenerateFullResDepthPass();
+	//2、通过depth downsample采样得到hi-Z
+	GenerateHiZBufferChain();
+}
+
+void CDeferredRenderPipeline::CreateHiZBuffer()
+{
+	auto clear_values = CD3DX12_CLEAR_VALUE(m_hiz_buffer_format, Colors::LightSteelBlue);
+	ThrowIfFailed(md3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Tex2D(m_hiz_buffer_format, mClientWidth, mClientHeight, log2(mClientHeight/HiZBufferMinSize), 0, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
+		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+		NULL,
+		IID_PPV_ARGS(&m_hiz_buffer)));
+}
+
+void CDeferredRenderPipeline::GenerateFullResDepthPass()
+{
+	mCommandList->SetGraphicsRootSignature(m_hiz_fullres_depth_pass_root_signature.Get());
+
+	mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE g_buffer_handle(mRtvHeap->GetCPUDescriptorHandleForHeapStart(),
+		SwapChainBufferCount,
+		mRtvDescriptorSize);
+	// Specify the buffers we are going to render to.
+	mCommandList->OMSetRenderTargets(NULL,
+		NULL,
+		true,
+		&DepthStencilView());
+	auto passCB = mFrameResources->FrameResCB->Resource();
+	UINT pass_offset = m_frame_res_offset.back().PassBeginOffset;
+	mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress() + pass_offset);
+
+	mCommandList->SetPipelineState(mPSOs["HiZFullRes"].Get());
+	// Bind all the materials used in this scene.  For structured buffers, we can bypass the heap and 
+	// set as a root descriptor.
+
+ 	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Occluder], (int)RenderLayer::Occluder);
+
+}
+
+void CDeferredRenderPipeline::GenerateHiZBufferChain()
+{
+
+}
+
+void CDeferredRenderPipeline::BuildHiZRootSignature()
+{
+	CD3DX12_ROOT_PARAMETER slotRootParameter[2];
+
+	slotRootParameter[0].InitAsConstantBufferView(0);
+	slotRootParameter[1].InitAsConstantBufferView(1);
+
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(2, slotRootParameter,
+		NULL, NULL,
+		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+	// create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
+	ComPtr<ID3DBlob> serializedRootSig = nullptr;
+	ComPtr<ID3DBlob> errorBlob = nullptr;
+	HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
+
+	if (errorBlob != nullptr)
+	{
+		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+	}
+	ThrowIfFailed(hr);
+
+	ThrowIfFailed(md3dDevice->CreateRootSignature(
+		0,
+		serializedRootSig->GetBufferPointer(),
+		serializedRootSig->GetBufferSize(),
+		IID_PPV_ARGS(m_hiz_fullres_depth_pass_root_signature.GetAddressOf())));
+}
+
+void CDeferredRenderPipeline::BuildHiZPSO()
+{
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC gs_pso_desc;
+	ZeroMemory(&gs_pso_desc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
+	gs_pso_desc.InputLayout = { mInputLayout.data(), (UINT)mInputLayout.size() };
+	gs_pso_desc.pRootSignature = m_hiz_fullres_depth_pass_root_signature.Get();
+	gs_pso_desc.VS =
+	{
+		reinterpret_cast<BYTE*>(mShaders["HiZVS"]->GetBufferPointer()),
+		mShaders["HiZVS"]->GetBufferSize()
+	};
+	gs_pso_desc.PS =
+	{
+		reinterpret_cast<BYTE*>(mShaders["HiZPS"]->GetBufferPointer()),
+		mShaders["HiZPS"]->GetBufferSize()
+	};
+	gs_pso_desc.NumRenderTargets = 0;
+
+	gs_pso_desc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	gs_pso_desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+	gs_pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+	gs_pso_desc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	gs_pso_desc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+	gs_pso_desc.SampleMask = UINT_MAX;
+	gs_pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+
+	gs_pso_desc.SampleDesc.Count = m4xMsaaState ? 4 : 1;
+	gs_pso_desc.SampleDesc.Quality = m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
+	gs_pso_desc.DSVFormat = mDepthStencilFormat;
+	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&gs_pso_desc, IID_PPV_ARGS(&mPSOs["HiZFullRes"])));
+}
+
+int CDeferredRenderPipeline::GetRenderLayerObjectOffset(int layer)
+{
+	switch (layer)
+	{
+	case (int)RenderLayer::Occluder:
+		return 0;
+	case (int)RenderLayer::Opaque:
+		return mRitemLayer[(int)RenderLayer::Occluder].size();
+	default:
+		break;
+	}
+	return 0;
 }
 

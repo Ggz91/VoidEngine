@@ -51,7 +51,7 @@ private:
 	void BuildPSOs();
 	void BuildDeferredPSO();
 	void BuildFrameResources();
-	void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems);
+	void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems, int layer);
 	void PushRenderItems(std::vector<RenderItem*>& render_item);
 	void PushMats(std::vector<RenderItem*>& render_item);
 	CD3DX12_CPU_DESCRIPTOR_HANDLE GetCpuSrv(int index)const;
@@ -148,5 +148,18 @@ private:
 	void CopyMatCBData();
 	void CopyPassCBData(const GameTimer& gt, UINT& begin_index);
 	UINT CalCurFrameContantsSize();
+
+	//hi-z pass
+	void HiZPass();
+	void CreateHiZBuffer();
+	Microsoft::WRL::ComPtr<ID3D12Resource> m_hiz_buffer;
+	DXGI_FORMAT m_hiz_buffer_format = DXGI_FORMAT_R32_FLOAT;
+	void GenerateFullResDepthPass();
+	void GenerateHiZBufferChain();
+	void BuildHiZRootSignature();
+	void BuildHiZPSO();
+
+	ComPtr<ID3D12RootSignature> m_hiz_fullres_depth_pass_root_signature = nullptr;
+	int GetRenderLayerObjectOffset(int layer);
 };
 
