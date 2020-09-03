@@ -11,9 +11,7 @@ CEngine::CEngine(EngineInitParam& init_param)
 	}
 	else
 	{
-#ifdef __ZBuffer_Rendering
 		m_render_pipeline = std::make_unique<CZBufferRenderPipeline>(init_param.HInstance, init_param.HWnd);
-#endif 
 	}
 	m_scene_tree = std::make_unique<QuadTree::CQuadTree>();
 }
