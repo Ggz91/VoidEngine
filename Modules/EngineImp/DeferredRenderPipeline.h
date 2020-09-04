@@ -155,11 +155,15 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_hiz_buffer;
 	DXGI_FORMAT m_hiz_buffer_format = DXGI_FORMAT_R32_FLOAT;
 	void GenerateFullResDepthPass();
-	void GenerateHiZBufferChain();
+	void GenerateHiZBufferChainPass();
 	void BuildHiZRootSignature();
+	void BuildFullResDepthPassRootSignature();
+	void BuildHiZBufferChainPassRootSignature();
 	void BuildHiZPSO();
 
 	ComPtr<ID3D12RootSignature> m_hiz_fullres_depth_pass_root_signature = nullptr;
+	ComPtr<ID3D12RootSignature> m_hiz_buffer_chain_pass_root_signature = nullptr;
 	int GetRenderLayerObjectOffset(int layer);
+	UINT GetHiZMipmapLevels() const;
 };
 
