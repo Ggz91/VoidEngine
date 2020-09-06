@@ -95,8 +95,9 @@ void CDeferredRenderPipeline::StrafeCamera(float dis)
 void CDeferredRenderPipeline::CreateRtvAndDsvDescriptorHeaps()
 {
 	//+2 for G-Buffers
+	//+1 for Hi-Z buffers array
 	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc;
-	rtvHeapDesc.NumDescriptors = SwapChainBufferCount + GBufferSize();
+	rtvHeapDesc.NumDescriptors = SwapChainBufferCount + GBufferSize() + 1;
 	rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
 	rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 	rtvHeapDesc.NodeMask = 0;
@@ -114,13 +115,16 @@ void CDeferredRenderPipeline::CreateRtvAndDsvDescriptorHeaps()
 
 	//G-buffer
 	CreateGBufferRTV();
+
+	//Hi-Z
+	CreateHiZBuffer();
 }
 
 void CDeferredRenderPipeline::OnResize()
 {
 	CBaseRenderPipeline::OnResize();
 
-	mCamera.SetLens(0.25f * MathHelper::Pi, AspectRatio(), 1.0f, 10000.0f);
+	mCamera.SetLens(0.25f * MathHelper::Pi, AspectRatio(), 1000.0f, 10000.0f);
 	mCamera.SetPosition(0.0f, 500.0f, 1500.0f);
 	mCamera.LookAt(mCamera.GetPosition3f(), XMFLOAT3(0, 0, 0), XMFLOAT3(0, 1, 0));
 }
@@ -168,7 +172,8 @@ void CDeferredRenderPipeline::DrawWithDeferredTexturing(const GameTimer& gt)
 
 	ID3D12DescriptorHeap* descriptorHeaps[] = { mSrvDescriptorHeap.Get() };
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
-
+	
+	HiZPass();
 	DeferredDrawFillGBufferPass();
 	DeferredDrawShadingPass();
 
@@ -274,13 +279,16 @@ bool CDeferredRenderPipeline::IsCameraDirty()
 void CDeferredRenderPipeline::BuildRootSignature()
 {
 	BuildDeferredRootSignature();
+	BuildHiZRootSignature();
 }
 
 void CDeferredRenderPipeline::BuildDescriptorHeaps()
 {
 	//+2 for g-buffers
+	//+1 for hi z buffer
+	//+GetHiZMipmapLevels() for hi z mipmaps
 	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-	srvHeapDesc.NumDescriptors = mTextures.size()+GBufferSize();
+	srvHeapDesc.NumDescriptors = mTextures.size()+GBufferSize() + 1 + GetHiZMipmapLevels();
 	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
@@ -317,6 +325,29 @@ void CDeferredRenderPipeline::BuildDescriptorHeaps()
 		gbuffer_srv_desc.Texture2D.ResourceMinLODClamp = 0;
 		md3dDevice->CreateShaderResourceView(m_g_buffer[i].Get(), &gbuffer_srv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mTextures.size()+i, mCbvSrvUavDescriptorSize));
 	}
+
+	//+1 for Hi-Z
+	D3D12_SHADER_RESOURCE_VIEW_DESC hiz_srv_desc = {};
+	hiz_srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	hiz_srv_desc.Format = m_hiz_buffer_format;
+	hiz_srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	hiz_srv_desc.Texture2D.MipLevels = GetHiZMipmapLevels();
+	hiz_srv_desc.Texture2D.MostDetailedMip = 0;
+	hiz_srv_desc.Texture2D.PlaneSlice = 0;
+	hiz_srv_desc.Texture2D.ResourceMinLODClamp = 0;
+	md3dDevice->CreateShaderResourceView(m_hiz_buffer.Get(), &hiz_srv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mTextures.size() + GBufferSize(), mCbvSrvUavDescriptorSize));
+
+	//for hi-z uav
+	D3D12_UNORDERED_ACCESS_VIEW_DESC uav = {};
+	uav.Format = m_hiz_buffer_format;
+	uav.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+	uav.Texture2D.MipSlice = 0;
+	for (int i=0; i<hiz_srv_desc.Texture2D.MipLevels; ++i)
+	{
+		md3dDevice->CreateUnorderedAccessView(m_hiz_buffer.Get(), NULL, &uav, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mTextures.size() + GBufferSize() + 1 + i, mCbvSrvUavDescriptorSize));
+		uav.Texture2D.MipSlice++;
+	}
+
 }
 
 void CDeferredRenderPipeline::BuildShadersAndInputLayout()
@@ -325,6 +356,9 @@ void CDeferredRenderPipeline::BuildShadersAndInputLayout()
 	mShaders["DeferredGSPS"] = d3dUtil::CompileShader(L".\\Shaders\\DeferredGSShader.hlsl", nullptr, "DeferredGSPS", "ps_5_1");
 	mShaders["DeferredShadingVS"] = d3dUtil::CompileShader(L".\\Shaders\\DeferredShadingShader.hlsl", nullptr, "ShadingVS", "vs_5_1");
 	mShaders["DeferredShadingPS"] = d3dUtil::CompileShader(L".\\Shaders\\DeferredShadingShader.hlsl", nullptr, "ShadingPS", "ps_5_1");
+	mShaders["HiZVS"] = d3dUtil::CompileShader(L".\\Shaders\\Depth.hlsl", nullptr, "DepthVS", "vs_5_1");
+	mShaders["HiZPS"] = d3dUtil::CompileShader(L".\\Shaders\\Depth.hlsl", nullptr, "DepthPS", "ps_5_1");
+	mShaders["HiZCS"] = d3dUtil::CompileShader(L".\\Shaders\\HiZMipmap.hlsl", nullptr, "GenerateHiZMipmaps", "cs_5_1");
 
 	mInputLayout =
 	{
@@ -339,6 +373,7 @@ void CDeferredRenderPipeline::BuildShadersAndInputLayout()
 void CDeferredRenderPipeline::BuildPSOs()
 {
 	BuildDeferredPSO();
+	BuildHiZPSO();
 }
 
 void CDeferredRenderPipeline::BuildDeferredPSO()
@@ -409,7 +444,7 @@ void CDeferredRenderPipeline::BuildFrameResources()
 	mFrameResources = std::make_unique<FrameResource>(md3dDevice.Get(),  mMaterials.size());
 }
 
-void CDeferredRenderPipeline::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems)
+void CDeferredRenderPipeline::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems, int layer)
 {
 	if (ritems.empty())
 	{
@@ -419,7 +454,7 @@ void CDeferredRenderPipeline::DrawRenderItems(ID3D12GraphicsCommandList* cmdList
 	UINT skinnedCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(SkinnedConstants));
 
 	auto objectCB = mFrameResources->FrameResCB->Resource();
-	UINT offset = m_frame_res_offset.back().ObjectBeginOffset;
+	UINT offset = m_frame_res_offset.back().ObjectBeginOffset + GetRenderLayerObjectOffset(layer);
 	// For each render item...
 	for (size_t i = 0; i < ritems.size(); ++i)
 	{
@@ -666,7 +701,7 @@ void CDeferredRenderPipeline::DeferredDrawFillGBufferPass()
 	// Bind all the materials used in this scene.  For structured buffers, we can bypass the heap and 
 	// set as a root descriptor.
 
-	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
+	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque], (int) RenderLayer::Opaque);
 
 	for (int i = 0; i < GBufferSize(); ++i)
 	{
@@ -894,9 +929,13 @@ void CDeferredRenderPipeline::CopyObjectCBData(UINT& begin_index)
 {
 	UINT objCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
 	auto currObjectCB = mFrameResources->FrameResCB.get();
-	for (int i = 0; i < mRitemLayer[(int)RenderLayer::Opaque].size(); ++i)
+	std::vector<RenderItem*> all_visible_objects;
+	all_visible_objects.insert(all_visible_objects.end(), mRitemLayer[(int)RenderLayer::Occluder].begin(), mRitemLayer[(int)RenderLayer::Occluder].end());
+	all_visible_objects.insert(all_visible_objects.end(), mRitemLayer[(int)RenderLayer::Opaque].begin(), mRitemLayer[(int)RenderLayer::Opaque].end());
+
+	for (int i = 0; i < all_visible_objects.size(); ++i)
 	{
-		auto& e = mRitemLayer[(int)RenderLayer::Opaque][i];
+		auto& e = all_visible_objects[i];
 		//if (e->NumFramesDirty > 0)
 		{
 			XMMATRIX world = XMLoadFloat4x4(&e->World);
@@ -981,8 +1020,8 @@ void CDeferredRenderPipeline::CopyPassCBData(const GameTimer& gt, UINT& begin_in
 	mMainPassCB.EyePosW = mCamera.GetPosition3f();
 	mMainPassCB.RenderTargetSize = XMFLOAT2((float)mClientWidth, (float)mClientHeight);
 	mMainPassCB.InvRenderTargetSize = XMFLOAT2(1.0f / mClientWidth, 1.0f / mClientHeight);
-	mMainPassCB.NearZ = 1.0f;
-	mMainPassCB.FarZ = 1000.0f;
+	mMainPassCB.NearZ = mCamera.GetNearZ();
+	mMainPassCB.FarZ = mCamera.GetFarZ();
 	mMainPassCB.TotalTime = gt.TotalTime();
 	mMainPassCB.DeltaTime = gt.DeltaTime();
 	mMainPassCB.AmbientLight = { 0.25f, 0.25f, 0.35f, 1.0f };
@@ -1003,5 +1042,244 @@ UINT CDeferredRenderPipeline::CalCurFrameContantsSize()
 	UINT pass_size = d3dUtil::CalcConstantBufferByteSize(sizeof(PassConstants));
 
 	return object_size + pass_size;
+}
+
+void CDeferredRenderPipeline::HiZPass()
+{
+	if (mRitemLayer[(int)RenderLayer::Occluder].empty())
+	{
+		return;
+	}
+
+	//1、生成全屏的depth
+	GenerateFullResDepthPass();
+	//2、通过depth downsample采样得到hi-Z
+	GenerateHiZBufferChainPass();
+}
+
+void CDeferredRenderPipeline::CreateHiZBuffer()
+{
+	auto clear_values = CD3DX12_CLEAR_VALUE(m_hiz_buffer_format, Colors::Black);
+	ThrowIfFailed(md3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Tex2D(m_hiz_buffer_format, mClientWidth, mClientHeight, 1, GetHiZMipmapLevels(), 1, 0, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
+		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+		&clear_values,
+		IID_PPV_ARGS(&m_hiz_buffer)));
+
+	D3D12_RENDER_TARGET_VIEW_DESC rt_desc;
+	rt_desc.Format = m_hiz_buffer_format;
+	rt_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+	rt_desc.Texture2D.MipSlice = 0;
+	rt_desc.Texture2D.PlaneSlice = 0;
+	CD3DX12_CPU_DESCRIPTOR_HANDLE h(CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), SwapChainBufferCount + GBufferSize(), mRtvDescriptorSize));
+	md3dDevice->CreateRenderTargetView(m_hiz_buffer.Get(), &rt_desc, h);
+}
+
+void CDeferredRenderPipeline::GenerateFullResDepthPass()
+{
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_hiz_buffer.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RENDER_TARGET));
+	mCommandList->SetGraphicsRootSignature(m_hiz_fullres_depth_pass_root_signature.Get());
+	CD3DX12_CPU_DESCRIPTOR_HANDLE h_hiz(mRtvHeap->GetCPUDescriptorHandleForHeapStart());
+	h_hiz.Offset(SwapChainBufferCount + GBufferSize(), mRtvDescriptorSize);
+	mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+	mCommandList->ClearRenderTargetView(h_hiz, Colors::Black, 0, nullptr);
+	mCommandList->OMSetRenderTargets(1, &h_hiz, true, &DepthStencilView());
+
+	auto passCB = mFrameResources->FrameResCB->Resource();
+	UINT pass_offset = m_frame_res_offset.back().PassBeginOffset;
+	mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress() + pass_offset);
+
+	mCommandList->SetPipelineState(mPSOs["HiZFullRes"].Get());
+	// Bind all the materials used in this scene.  For structured buffers, we can bypass the heap and 
+	// set as a root descriptor.
+
+ 	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Occluder], (int)RenderLayer::Occluder);
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_hiz_buffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+
+}
+
+void CDeferredRenderPipeline::GenerateHiZBufferChainPass()
+{
+	mCommandList->SetPipelineState(mPSOs["HiZChainBuffer"].Get());
+	mCommandList->SetComputeRootSignature(m_hiz_buffer_chain_pass_root_signature.Get());
+	
+	CD3DX12_GPU_DESCRIPTOR_HANDLE h_full_res(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	CD3DX12_GPU_DESCRIPTOR_HANDLE h_mipmap(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	h_full_res.Offset(mTextures.size() + GBufferSize(), mCbvSrvUavDescriptorSize);
+	h_mipmap.Offset(mTextures.size() + GBufferSize() + 1, mCbvSrvUavDescriptorSize);
+
+	struct TexelParam
+	{
+		TexelParam(FLOAT f) : Float(f) {}
+		TexelParam(UINT u) : Uint(u) {}
+
+		void operator= (FLOAT f) { Float = f; }
+		void operator= (UINT u) { Uint = u; }
+
+		union
+		{
+			FLOAT Float;
+			UINT Uint;
+		};
+	};
+
+	for (int i=0; i<GetHiZMipmapLevels() - 1; ++i)
+	{
+		mCommandList->SetComputeRootDescriptorTable(0, h_full_res);
+		h_mipmap.Offset(1, mCbvSrvUavDescriptorSize);
+		mCommandList->SetComputeRootDescriptorTable(1, h_mipmap);
+
+		UINT width = mClientWidth >> (i+1);
+		UINT height = mClientHeight >> (i+1);
+
+		mCommandList->SetComputeRoot32BitConstant(2, TexelParam(1.0f / width).Uint, 0);
+		mCommandList->SetComputeRoot32BitConstant(2, TexelParam(1.0f / height).Uint, 1);
+		mCommandList->SetComputeRoot32BitConstant(2, i, 2);
+
+		mCommandList->Dispatch(mClientWidth/8, mClientHeight/8, 1);
+	}
+}
+
+void CDeferredRenderPipeline::BuildHiZRootSignature()
+{
+	BuildFullResDepthPassRootSignature();
+	BuildHiZBufferChainPassRootSignature();
+}
+
+void CDeferredRenderPipeline::BuildFullResDepthPassRootSignature()
+{
+	CD3DX12_ROOT_PARAMETER slotRootParameter[2];
+
+	slotRootParameter[0].InitAsConstantBufferView(0);
+	slotRootParameter[1].InitAsConstantBufferView(1);
+
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(2, slotRootParameter,
+		NULL, NULL,
+		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+	// create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
+	ComPtr<ID3DBlob> serializedRootSig = nullptr;
+	ComPtr<ID3DBlob> errorBlob = nullptr;
+	HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
+
+	if (errorBlob != nullptr)
+	{
+		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+	}
+	ThrowIfFailed(hr);
+
+	ThrowIfFailed(md3dDevice->CreateRootSignature(
+		0,
+		serializedRootSig->GetBufferPointer(),
+		serializedRootSig->GetBufferSize(),
+		IID_PPV_ARGS(m_hiz_fullres_depth_pass_root_signature.GetAddressOf())));
+}
+
+void CDeferredRenderPipeline::BuildHiZBufferChainPassRootSignature()
+{
+	CD3DX12_ROOT_PARAMETER slotRootParameter[3];
+	CD3DX12_DESCRIPTOR_RANGE input_buffer_table;
+	input_buffer_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+
+	CD3DX12_DESCRIPTOR_RANGE output_buffer_table;
+	output_buffer_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+
+	slotRootParameter[0].InitAsDescriptorTable(1, &input_buffer_table);
+	slotRootParameter[1].InitAsDescriptorTable(1, &output_buffer_table);
+	slotRootParameter[2].InitAsConstants(3, 0);
+
+	const CD3DX12_STATIC_SAMPLER_DESC sampler_desc(
+		0, // shaderRegister
+		D3D12_FILTER_MIN_MAG_MIP_POINT, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP); // addressW
+
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(3, slotRootParameter,
+		1, &sampler_desc,
+		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+	
+	// create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
+	ComPtr<ID3DBlob> serializedRootSig = nullptr;
+	ComPtr<ID3DBlob> errorBlob = nullptr;
+	HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
+
+	if (errorBlob != nullptr)
+	{
+		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+	}
+	ThrowIfFailed(hr);
+
+	ThrowIfFailed(md3dDevice->CreateRootSignature(
+		0,
+		serializedRootSig->GetBufferPointer(),
+		serializedRootSig->GetBufferSize(),
+		IID_PPV_ARGS(m_hiz_buffer_chain_pass_root_signature.GetAddressOf())));
+}
+
+void CDeferredRenderPipeline::BuildHiZPSO()
+{
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC fullres_pso_desc;
+	ZeroMemory(&fullres_pso_desc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
+	fullres_pso_desc.InputLayout = { mInputLayout.data(), (UINT)mInputLayout.size() };
+	fullres_pso_desc.pRootSignature = m_hiz_fullres_depth_pass_root_signature.Get();
+	fullres_pso_desc.VS =
+	{
+		reinterpret_cast<BYTE*>(mShaders["HiZVS"]->GetBufferPointer()),
+		mShaders["HiZVS"]->GetBufferSize()
+	};
+	fullres_pso_desc.PS =
+	{
+		reinterpret_cast<BYTE*>(mShaders["HiZPS"]->GetBufferPointer()),
+		mShaders["HiZPS"]->GetBufferSize()
+	};
+	fullres_pso_desc.NumRenderTargets = 1;
+	fullres_pso_desc.RTVFormats[0] = m_hiz_buffer_format;
+
+	fullres_pso_desc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	fullres_pso_desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+	fullres_pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+	fullres_pso_desc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	fullres_pso_desc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+	fullres_pso_desc.SampleMask = UINT_MAX;
+	fullres_pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+
+	fullres_pso_desc.SampleDesc.Count = m4xMsaaState ? 4 : 1;
+	fullres_pso_desc.SampleDesc.Quality = m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
+	fullres_pso_desc.DSVFormat = mDepthStencilFormat;
+	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&fullres_pso_desc, IID_PPV_ARGS(&mPSOs["HiZFullRes"])));
+
+	D3D12_COMPUTE_PIPELINE_STATE_DESC chainbuffer_pso_desc;
+	ZeroMemory(&chainbuffer_pso_desc, sizeof(D3D12_COMPUTE_PIPELINE_STATE_DESC));
+	chainbuffer_pso_desc.pRootSignature = m_hiz_buffer_chain_pass_root_signature.Get();
+	chainbuffer_pso_desc.CS =
+	{
+		reinterpret_cast<BYTE*>(mShaders["HiZCS"]->GetBufferPointer()),
+		mShaders["HiZCS"]->GetBufferSize()
+	};
+	chainbuffer_pso_desc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+	ThrowIfFailed(md3dDevice->CreateComputePipelineState(&chainbuffer_pso_desc, IID_PPV_ARGS(&mPSOs["HiZChainBuffer"])));
+}
+
+int CDeferredRenderPipeline::GetRenderLayerObjectOffset(int layer)
+{
+	switch (layer)
+	{
+	case (int)RenderLayer::Occluder:
+		return 0;
+	case (int)RenderLayer::Opaque:
+		return mRitemLayer[(int)RenderLayer::Occluder].size();
+	default:
+		break;
+	}
+	return 0;
+}
+
+UINT CDeferredRenderPipeline::GetHiZMipmapLevels() const
+{
+	return log2(mClientWidth / HiZBufferMinSize) + 1;
 }
 
