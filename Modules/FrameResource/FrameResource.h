@@ -67,11 +67,22 @@ struct SsaoConstants
     float SurfaceEpsilon = 0.05f;
 };
 
+struct FrameResComponentSize
+{
+    UINT TotalSize;
+    UINT VertexCBSize;
+    UINT IndexCBSize;
+    UINT ObjectCBSize;
+    UINT PassCBSize;
+};
+
 struct FrameResourceOffset
 {
     UINT64 Fence;
     UINT EndResOffset;
     UINT Size;
+    UINT VertexBeginOffset;
+    UINT IndexBeginOffset;
     UINT ObjectBeginOffset;
     UINT PassBeginOffset;
 };

@@ -23,7 +23,7 @@ public:
 	~CDeferredRenderPipeline();
 
 	virtual bool Initialize()override;
-	virtual void PushModels(std::vector<RenderItem*>& render_items) override;
+	virtual void PushMats(std::vector<RenderItem*>& render_items) override;
 
 	virtual void PitchCamera(float rad);
 	virtual void RotateCameraY(float rad);
@@ -53,7 +53,6 @@ private:
 	void BuildFrameResources();
 	void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems, int layer);
 	void PushRenderItems(std::vector<RenderItem*>& render_item);
-	void PushMats(std::vector<RenderItem*>& render_item);
 	CD3DX12_CPU_DESCRIPTOR_HANDLE GetCpuSrv(int index)const;
 	CD3DX12_GPU_DESCRIPTOR_HANDLE GetGpuSrv(int index)const;
 	CD3DX12_CPU_DESCRIPTOR_HANDLE GetDsv(int index)const;
@@ -141,13 +140,13 @@ private:
 
 	std::queue<FrameResourceOffset> m_frame_res_offset;
 	void UpdateFrameResource(const GameTimer& gt);
-	bool CanFillFrameRes(UINT size);
+	bool CanFillFrameRes(FrameResComponentSize& size, FrameResourceOffset& offset);
 	void FreeMemToCompletedFrame(UINT64 frame_index);
-	void CopyFrameRescourceData(const GameTimer& gt, FrameResourceOffset& offset);
-	void CopyObjectCBData(UINT& begin_Index);
+	void CopyFrameRescourceData(const GameTimer& gt, const FrameResourceOffset& offset);
+	void CopyObjectCBAndVertexData(const FrameResourceOffset& offset);
 	void CopyMatCBData();
-	void CopyPassCBData(const GameTimer& gt, UINT& begin_index);
-	UINT CalCurFrameContantsSize();
+	void CopyPassCBData(const GameTimer& gt, const FrameResourceOffset& offset);
+	FrameResComponentSize CalCurFrameContantsSize();
 
 	//hi-z pass
 	void HiZPass();
@@ -165,5 +164,6 @@ private:
 	ComPtr<ID3D12RootSignature> m_hiz_buffer_chain_pass_root_signature = nullptr;
 	int GetRenderLayerObjectOffset(int layer);
 	UINT GetHiZMipmapLevels() const;
+	FrameResComponentSize m_contants_size;
 };
 
