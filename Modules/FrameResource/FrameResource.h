@@ -5,14 +5,19 @@
 #include "../Common/UploadBuffer.h"
 #include "../Common/GeometryDefines.h"
 
+struct IndirectCommand
+{
+	D3D12_GPU_VIRTUAL_ADDRESS cbv;
+	D3D12_DRAW_ARGUMENTS drawArguments;
+};
+
 struct ObjectConstants
 {
     DirectX::XMFLOAT4X4 World = MathHelper::Identity4x4();
 	DirectX::XMFLOAT4X4 TexTransform = MathHelper::Identity4x4();
-	UINT     MaterialIndex;
-	UINT     ObjPad0;
-	UINT     ObjPad1;
-	UINT     ObjPad2;
+    AABB    Bounds;
+    UINT     MaterialIndex;
+    IndirectCommand DrawCommand;
 };
 
 struct SkinnedConstants

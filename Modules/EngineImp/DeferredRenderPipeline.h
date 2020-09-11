@@ -5,6 +5,7 @@
 #include "../Common/Camera.h"
 #include "../Common/RenderItems.h"
 #include <queue>
+#include "../Predefines/ScenePredefines.h"
 
 class ShadowMap;
 class Ssao;
@@ -165,5 +166,20 @@ private:
 	int GetRenderLayerObjectOffset(int layer);
 	UINT GetHiZMipmapLevels() const;
 	FrameResComponentSize m_contants_size;
+
+	void InstanceHiZCullingPass();
+	void ClusterHiZCullingPass();
+	void BuildHiZCullingRootSignature();
+	void BuildHiZCullingPSO();
+	ComPtr<ID3D12RootSignature> m_hiz_instance_culling_pass_root_signature = nullptr;
+	ComPtr<ID3D12RootSignature> m_hiz_cluster_culling_pass_root_signature = nullptr;
+
+	//instance culling result
+	ComPtr<ID3D12Resource> m_instance_culling_result_buffer;
+	ComPtr<ID3D12Resource> m_culling_result_reset_buffer;
+	//mesh cluster culling result
+	ComPtr<ID3D12Resource> m_cluster_culling_result_buffer;
+	UINT AlignForUavCounter(UINT bufferSize);
+	const int ObjectConstantsBufferOffset = AlignForUavCounter(ScenePredefine::MaxObjectNumPerScene * sizeof(ObjectConstants));
 };
 
