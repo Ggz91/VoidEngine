@@ -181,5 +181,7 @@ private:
 	ComPtr<ID3D12Resource> m_cluster_culling_result_buffer;
 	UINT AlignForUavCounter(UINT bufferSize);
 	const int ObjectConstantsBufferOffset = AlignForUavCounter(ScenePredefine::MaxObjectNumPerScene * sizeof(ObjectConstants));
+	UINT AlignForCrvAddress(const D3D12_GPU_VIRTUAL_ADDRESS& address, const UINT& offset);
+	UINT Align(const UINT& size, const UINT& alignment);
 };
 
