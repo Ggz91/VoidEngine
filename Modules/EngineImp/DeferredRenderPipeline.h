@@ -42,7 +42,7 @@ private:
 	virtual BoundingFrustum GetCameraFrustum() override;
 	virtual DirectX::XMFLOAT3 GetCameraDir();
 	virtual void ClearVisibleRenderItems();
-	virtual void PushVisibleModels(int layer, std::vector<RenderItem*>& render_items, bool add /* = false */) override;
+	virtual void PushVisibleModels(std::map<int,  std::vector<RenderItem*>>& render_items, bool add = false) override;
 	virtual bool InitDirect3D() override;
 	virtual bool IsCameraDirty() override;
 
@@ -183,5 +183,7 @@ private:
 	const int ObjectConstantsBufferOffset = AlignForUavCounter(ScenePredefine::MaxObjectNumPerScene * sizeof(ObjectConstants));
 	UINT AlignForCrvAddress(const D3D12_GPU_VIRTUAL_ADDRESS& address, const UINT& offset);
 	UINT Align(const UINT& size, const UINT& alignment);
+
+	std::vector<RenderItem*> GetVisibleRenderItems();
 };
 

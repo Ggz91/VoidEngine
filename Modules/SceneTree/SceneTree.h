@@ -18,7 +18,7 @@ namespace QuadTree
 	struct SceneTreeGrid
 	{
 		TreeNode* Node;
-		std::list<RenderItem*> RenderItemsList;
+		std::map<int ,std::list<RenderItem*>> RenderItemsList;
 	};
 
 	typedef std::pair<int, int> GridIndex;
@@ -38,7 +38,7 @@ namespace QuadTree
 		virtual void Init(std::vector<RenderItem*>& render_items) override;
 		virtual void Load(std::string& file) override;
 		virtual void Save(std::string& file) override;
-		virtual std::vector<RenderItem*> Culling(const DirectX::BoundingFrustum& frustum) override;
+		virtual  std::map<int, std::vector<RenderItem*>> Culling(const DirectX::BoundingFrustum& frustum) override;
 	private:
 		std::unique_ptr<TreeNode> m_tree;
 
@@ -49,9 +49,9 @@ namespace QuadTree
 		int CalLayerDepth(const AABB& bound);
 		GridIndex CalGridIndex(const XMFLOAT4X4& pos, int layer_depth);
 		TreeNode* GetParentTreeNode(const GridIndex& index, int depth);
-		void CollectRenderItems(const GridIndex& index, int depth , std::list<RenderItem*>& render_items);
+		void CollectRenderItems(const GridIndex& index, int depth , std::map< int, std::list<RenderItem*>>& render_items);
 		TreeNode* CreateNode(const GridIndex& index, int depth);
 		void ReleaseNode(TreeNode* node);
-		void CullingNode(TreeNode* node, const DirectX::BoundingFrustum& frustum, std::vector<RenderItem*>& render_items);
+		void CullingNode(TreeNode* node, const DirectX::BoundingFrustum& frustum, std::map<int, std::vector<RenderItem*>>& render_items);
 	};
 }

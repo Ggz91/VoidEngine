@@ -26,8 +26,9 @@ FrameResource::FrameResource(ID3D12Device* device, UINT mat_size)
 	m_total_size = (pass_size + object_max_size + vertex_max_size + index_max_size) * gNumFrameResources;
 
 	FrameResCB = std::make_unique<UploadBuffer>(device, m_total_size , sizeof(char), false);
-
+	FrameResCB->Resource()->SetName(L"FrameResrource CB");
 	MatCB = std::make_unique<UploadBuffer>(device, mat_max_size , sizeof(MatData), false);
+	MatCB->Resource()->SetName(L"Mat CB ");
 }
 
 FrameResource::~FrameResource()

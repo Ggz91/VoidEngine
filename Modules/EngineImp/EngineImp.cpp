@@ -38,7 +38,7 @@ void CEngine::Update(const GameTimer& gt)
 		m_render_pipeline->UpdateCamera(gt);
 		auto culling_res = m_scene_tree->Culling(m_render_pipeline->GetCameraFrustum());
 		m_render_pipeline->ClearVisibleRenderItems();
-		m_render_pipeline->PushVisibleModels((int)RenderLayer::Occluder, culling_res);
+		m_render_pipeline->PushVisibleModels(culling_res);
 	}
 	
 	m_render_pipeline->Update(gt);

@@ -1,4 +1,5 @@
 ﻿#include "DeferredRenderPipeline.h"
+#include <map>
 #include <iostream>
 
 #include "CBaseRenderPipeline.h"
@@ -223,17 +224,27 @@ void CDeferredRenderPipeline::ClearVisibleRenderItems()
 	mAllRitems.clear();
 }
 
-void CDeferredRenderPipeline::PushVisibleModels(int layer, std::vector<RenderItem*>& render_items, bool add /* = false */)
+void CDeferredRenderPipeline::PushVisibleModels(std::map<int, std::vector<RenderItem*>>& render_items, bool add /*= false*/)
 {
+	auto itr = render_items.begin();
 	if (add)
 	{
-		mRitemLayer[layer].insert(mRitemLayer[layer].end(), render_items.begin(), render_items.end());
+		while (itr != render_items.end())
+		{
+			mRitemLayer[itr->first].insert(mRitemLayer[itr->first].end(), itr->second.begin(), itr->second.end());
+			mAllRitems.insert(mAllRitems.end(), itr->second.begin(), itr->second.end());
+			itr++;
+		}
 	}
 	else
 	{
-		mRitemLayer[layer] = render_items;
+		while (itr != render_items.end())
+		{
+			mRitemLayer[itr->first] = itr->second;
+			mAllRitems.insert(mAllRitems.end(), itr->second.begin(), itr->second.end());
+			itr++;
+		}
 	}
-	mAllRitems.insert(mAllRitems.end(), render_items.begin(), render_items.end());
 }
 
 bool CDeferredRenderPipeline::InitDirect3D()
@@ -278,9 +289,9 @@ void CDeferredRenderPipeline::BuildDescriptorHeaps()
 	//+1 for hi z buffer
 	//+GetHiZMipmapLevels() for hi z mipmaps
 	//+1 for instance culling res
-	//+2 for instance culling object buffer + pass buffer
+	//+1 for instance culling object buffer + pass buffer
 	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-	srvHeapDesc.NumDescriptors = mTextures.size() +GBufferSize() + 1 + GetHiZMipmapLevels() + 1 + 2;
+	srvHeapDesc.NumDescriptors = mTextures.size() +GBufferSize() + 1 + GetHiZMipmapLevels() + 1 + 1;
 	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
@@ -680,6 +691,8 @@ void CDeferredRenderPipeline::CreateGBufferRTV()
 			D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
 			&clear_values,
 			IID_PPV_ARGS(&m_g_buffer[i])));
+		std::wstring buffer_name = L"GBuffer RT " + std::to_wstring(i);
+		m_g_buffer[i]->SetName(buffer_name.c_str());
 
 		D3D12_RENDER_TARGET_VIEW_DESC rt_desc;
 		rt_desc.Format = m_g_buffer_format[i];
@@ -1148,7 +1161,7 @@ void CDeferredRenderPipeline::CopyPassCBData(const GameTimer& gt, const FrameRes
 	mMainPassCB.Lights[1].Strength = { 0.4f, 0.4f, 0.4f };
 	mMainPassCB.Lights[2].Direction = mRotatedLightDirections[2];
 	mMainPassCB.Lights[2].Strength = { 0.2f, 0.2f, 0.2f };
-	mMainPassCB.ObjectNum = mRitemLayer[(int)RenderLayer::Opaque].size();
+	mMainPassCB.ObjectNum = GetVisibleRenderItems().size();
 
 	auto currPassCB = mFrameResources->FrameResCB.get();
 	currPassCB->CopyData(offset.PassBeginOffset , &mMainPassCB, sizeof(PassConstants));
@@ -1193,6 +1206,8 @@ void CDeferredRenderPipeline::CreateHiZBuffer()
 		&clear_values,
 		IID_PPV_ARGS(&m_hiz_buffer)));
 
+	m_hiz_buffer->SetName(L"HiZ Buffer");
+
 	D3D12_RENDER_TARGET_VIEW_DESC rt_desc;
 	rt_desc.Format = m_hiz_buffer_format;
 	rt_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
@@ -1220,6 +1235,8 @@ void CDeferredRenderPipeline::CreateHiZBuffer()
 		nullptr,
 		IID_PPV_ARGS(&m_culling_result_reset_buffer)));
 	
+	m_culling_result_reset_buffer->SetName(L"HiZ result reset buffer");
+
 	D3D12_RANGE zero_range = { 0, 0 };
 	UINT8* null_data = nullptr;
 	m_culling_result_reset_buffer->Map(0, &zero_range, reinterpret_cast<void**> (&null_data));
@@ -1458,23 +1475,22 @@ void CDeferredRenderPipeline::InstanceHiZCullingPass()
 	auto cur_cb = mFrameResources->FrameResCB->Resource();
 	auto cur_offset = m_frame_res_offset.back();
 	
-	mCommandList->SetComputeRootConstantBufferView(0, cur_cb->GetGPUVirtualAddress() + cur_offset.PassBeginOffset);
-	
 	//动态绑定ring buffer中的资源
 	D3D12_SHADER_RESOURCE_VIEW_DESC obj_srv_desc = {};
 	obj_srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 	obj_srv_desc.Format = DXGI_FORMAT_UNKNOWN;
 	obj_srv_desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-	obj_srv_desc.Buffer.FirstElement = cur_offset.ObjectBeginOffset / sizeof(ObjectConstants);
+	obj_srv_desc.Buffer.FirstElement = cur_offset.ObjectBeginOffset / sizeof(ObjectConstants) +GetRenderLayerObjectOffset((int)RenderLayer::Opaque);
 	obj_srv_desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
-	obj_srv_desc.Buffer.NumElements = ScenePredefine::MaxObjectNumPerScene;
+	obj_srv_desc.Buffer.NumElements = ScenePredefine::MaxObjectNumPerScene;// mFrameResources->Size() / sizeof(ObjectConstants);
 	obj_srv_desc.Buffer.StructureByteStride = sizeof(ObjectConstants);
-	md3dDevice->CreateShaderResourceView(mFrameResources->FrameResCB->Resource(), &obj_srv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mTextures.size() + GBufferSize() + 1, mCbvSrvUavDescriptorSize));
+	md3dDevice->CreateShaderResourceView(mFrameResources->FrameResCB->Resource(), &obj_srv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mTextures.size() + GBufferSize() + 1 + GetHiZMipmapLevels() + 1, mCbvSrvUavDescriptorSize));
 
 	mCommandList->SetComputeRootConstantBufferView(0, cur_cb->GetGPUVirtualAddress() + cur_offset.PassBeginOffset);
 	mCommandList->SetComputeRootDescriptorTable(2, h_output_culling.Offset(1, mCbvSrvUavDescriptorSize));
-	mCommandList->Dispatch(min(1, mAllRitems.size() / 128), 1, 1);
-	//mCommandList->Dispatch(min(1, mRitemLayer[(int)RenderLayer::Opaque].size() / 128), 1, 1);
+	UINT size = GetVisibleRenderItems().size() / 128;
+	size += (GetVisibleRenderItems().size() % 128 == 0) ? 0 : 1;
+	mCommandList->Dispatch(max(1, size), 1, 1);
 }
 
 void CDeferredRenderPipeline::ClusterHiZCullingPass()
@@ -1603,5 +1619,10 @@ UINT CDeferredRenderPipeline::Align(const UINT& size, const UINT& alignment)
 	count += (size % alignment == 0) ? 0 : 1;
 	
 	return count * alignment;
+}
+
+std::vector<RenderItem*> CDeferredRenderPipeline::GetVisibleRenderItems()
+{
+	return mRitemLayer[(int)RenderLayer::Opaque];
 }
 

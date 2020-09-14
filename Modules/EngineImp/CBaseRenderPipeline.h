@@ -13,6 +13,7 @@
 #include "../Common/GameTimer.h"
 #include "../Common/GeometryDefines.h"
 #include <DirectXCollision.h>
+#include <map>
 
 // Link necessary d3d12 libraries.
 #pragma comment(lib,"d3dcompiler.lib")
@@ -41,7 +42,7 @@ public:
 	virtual DirectX::BoundingFrustum GetCameraFrustum() = 0;
 	virtual DirectX::XMFLOAT3 GetCameraDir() = 0;
 	virtual void ClearVisibleRenderItems() = 0;
-	virtual void PushVisibleModels(int layer, std::vector<RenderItem*>& render_items, bool add = false) = 0;
+	virtual void PushVisibleModels(std::map<int,  std::vector<RenderItem*>>& render_items, bool add = false) = 0;
 	virtual bool IsCameraDirty() = 0;
 
 };
@@ -83,7 +84,7 @@ protected:
 	virtual DirectX::BoundingFrustum GetCameraFrustum() = 0;
 	virtual DirectX::XMFLOAT3 GetCameraDir() = 0;
 	virtual void ClearVisibleRenderItems() = 0;
-	virtual void PushVisibleModels(int layer, std::vector<RenderItem*>& render_items, bool add = false) = 0;
+	virtual void PushVisibleModels(std::map<int,  std::vector<RenderItem*>>& render_items, bool add = false) = 0;
 	virtual bool IsCameraDirty() = 0;
 
 protected:

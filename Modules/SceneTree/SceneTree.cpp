@@ -33,9 +33,9 @@ namespace QuadTree
 
 	}
 
-	std::vector<RenderItem*> CQuadTree::Culling(const DirectX::BoundingFrustum& frustum)
-	{
-		std::vector<RenderItem*> res;
+	std::map<int, std::vector<RenderItem*>> CQuadTree::Culling(const DirectX::BoundingFrustum& frustum)
+{
+		std::map<int, std::vector<RenderItem*>> res;
 		
 		//深度遍历把没剔除的子节点加入到最后要渲染的队列中
 		TreeNode* node = m_tree.get();
@@ -75,7 +75,7 @@ namespace QuadTree
 		{
 			int depth = CalLayerDepth(render_items[i]->Bounds);
 			GridIndex index = CalGridIndex(render_items[i]->World, depth);
-			m_tree_layers[depth].Grids[index].RenderItemsList.push_back(render_items[i]);
+			m_tree_layers[depth].Grids[index].RenderItemsList[(int)render_items[i]->Layer].push_back(render_items[i]);
 		}
 
 	}
@@ -151,13 +151,18 @@ namespace QuadTree
 		return grid.Node;
 	}
 
-	void CQuadTree::CollectRenderItems(const GridIndex& index, int depth, std::list<RenderItem*>& render_items)
+	void CQuadTree::CollectRenderItems(const GridIndex& index, int depth, std::map< int, std::list<RenderItem*>>& render_items)
 	{
 		//把自己的节点加入
 		if (0 != m_tree_layers[depth].Grids[index].RenderItemsList.size())
 		{
 			auto& cur_render_items = m_tree_layers[depth].Grids[index].RenderItemsList;
-			render_items.insert(render_items.end(), cur_render_items.begin(), cur_render_items.end());
+			auto itr = cur_render_items.begin();
+			while (itr != cur_render_items.end())
+			{
+				render_items[itr->first].insert(render_items[itr->first].end(), cur_render_items[itr->first].begin(), cur_render_items[itr->first].end());
+				++itr;
+			}
 		}
 
 		if ((SceneTreeDepth - 1) == depth)
@@ -218,7 +223,7 @@ namespace QuadTree
 		node = NULL;
 	}
 
-	void CQuadTree::CullingNode(TreeNode* node, const DirectX::BoundingFrustum& frustum, std::vector<RenderItem*>& render_items)
+	void CQuadTree::CullingNode(TreeNode* node, const DirectX::BoundingFrustum& frustum, std::map<int, std::vector<RenderItem*>>& render_items)
 	{
 		//判断当前是否被剔除
 		auto status = frustum.Contains(node->aabb);
@@ -232,7 +237,12 @@ namespace QuadTree
 		if (0 == node->ChildNodes.size())
 		{
 			//已经到了叶子节点
-			render_items.insert(render_items.end(), node->RenderItemsList.begin(), node->RenderItemsList.end());
+			auto itr = node->RenderItemsList.begin();
+			while (itr != node->RenderItemsList.end())
+			{
+				render_items[itr->first].insert(render_items[itr->first].end(), node->RenderItemsList[itr->first].begin(), node->RenderItemsList[itr->first].end());
+				++itr;
+			}
 			return;
 		}
 

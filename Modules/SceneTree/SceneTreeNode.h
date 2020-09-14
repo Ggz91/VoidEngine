@@ -20,7 +20,7 @@ namespace QuadTree
 		BoundingBox aabb;
 		std::list<TreeNode*> ChildNodes;
 		TreeNode* Parent;
-		std::list<RenderItem*> RenderItemsList;
+		std::map<int,std::list<RenderItem*>> RenderItemsList;
 	};
 }
 
