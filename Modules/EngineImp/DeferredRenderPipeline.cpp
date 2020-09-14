@@ -1056,6 +1056,7 @@ void CDeferredRenderPipeline::CopyObjectCBAndVertexData(const FrameResourceOffse
 		//copy object data
 		ObjectConstants objConstants;
 		objConstants.Bounds.MaxVertex = e->Bounds.MaxVertex;
+		objConstants.Bounds.MinVertex = e->Bounds.MinVertex;
 		XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
 		XMStoreFloat4x4(&objConstants.TexTransform, XMMatrixTranspose(texTransform));
 		objConstants.DrawCommand.cbv = curr_cb->Resource()->GetGPUVirtualAddress() + object_offset;
@@ -1252,7 +1253,7 @@ void CDeferredRenderPipeline::GenerateFullResDepthPass()
 	CD3DX12_CPU_DESCRIPTOR_HANDLE h_hiz(mRtvHeap->GetCPUDescriptorHandleForHeapStart());
 	h_hiz.Offset(SwapChainBufferCount + GBufferSize(), mRtvDescriptorSize);
 	mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
-	mCommandList->ClearRenderTargetView(h_hiz, Colors::Black, 0, nullptr);
+	mCommandList->ClearRenderTargetView(h_hiz, Colors::White, 0, nullptr);
 	mCommandList->OMSetRenderTargets(1, &h_hiz, true, &DepthStencilView());
 
 	auto passCB = mFrameResources->FrameResCB->Resource();
