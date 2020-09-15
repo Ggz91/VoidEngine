@@ -79,17 +79,18 @@ struct FrameResComponentSize
     UINT IndexCBSize;
     UINT ObjectCBSize;
     UINT PassCBSize;
+    UINT MatCBSize;
 };
 
 struct FrameResourceOffset
 {
     UINT64 Fence;
     UINT EndResOffset;
-    UINT Size;
     UINT VertexBeginOffset;
     UINT IndexBeginOffset;
     UINT ObjectBeginOffset;
     UINT PassBeginOffset;
+    UINT MatBeginOffset;
 };
 
 // Stores the resources needed for the CPU to build the command lists
@@ -98,7 +99,7 @@ struct FrameResource
 {
 public:
     
-    FrameResource(ID3D12Device* device, UINT mat_size);
+    FrameResource(ID3D12Device* device);
     FrameResource(const FrameResource& rhs) = delete;
     FrameResource& operator=(const FrameResource& rhs) = delete;
     ~FrameResource();
@@ -110,7 +111,6 @@ public:
     // We cannot update a cbuffer until the GPU is done processing the commands
     // that reference it.  So each frame needs their own cbuffers.
 	std::unique_ptr<UploadBuffer> FrameResCB = nullptr;
-	std::unique_ptr<UploadBuffer> MatCB = nullptr;
 
     // Fence value to mark commands up to this fence point.  This lets us
     // check if these frame resources are still in use by the GPU.

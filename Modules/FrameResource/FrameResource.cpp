@@ -2,7 +2,7 @@
 #include "../Predefines/ScenePredefines.h"
 #include "../Predefines/BufferPredefines.h"
 
-FrameResource::FrameResource(ID3D12Device* device, UINT mat_size)
+FrameResource::FrameResource(ID3D12Device* device)
 {
 	CmdListAlloc.resize(MaxCommandAllocNum);
 	for (int i=0; i< MaxCommandAllocNum; ++i)
@@ -13,22 +13,20 @@ FrameResource::FrameResource(ID3D12Device* device, UINT mat_size)
 	}
 	
 	/*
-		| ObjectContents | PassContents | VertexBuffer | IndexBuffer |
+		| ObjectContents | MatBuffer | PassContents | VertexBuffer | IndexBuffer |
 	*/
 
 
 	//根据场景内实体顶点上限的buffer来计算size
-	UINT mat_max_size = sizeof(MatData)* mat_size;
 	UINT pass_size = sizeof(PassConstants);
 	UINT object_max_size = sizeof(ObjectConstants)* ScenePredefine::MaxObjectNumPerScene;
 	UINT vertex_max_size = sizeof(VertexData)* ScenePredefine::MaxMeshVertexNumPerScene;
+	UINT mat_max_size = sizeof(MatData) * ScenePredefine::MaxObjectNumPerScene;
 	UINT index_max_size = sizeof(std::uint16_t) * ScenePredefine::MaxMeshVertexNumPerScene * 3;
-	m_total_size = (pass_size + object_max_size + vertex_max_size + index_max_size) * gNumFrameResources;
+	m_total_size = (pass_size + object_max_size + vertex_max_size + index_max_size + mat_max_size) * gNumFrameResources;
 
 	FrameResCB = std::make_unique<UploadBuffer>(device, m_total_size , sizeof(char), false);
 	FrameResCB->Resource()->SetName(L"FrameResrource CB");
-	MatCB = std::make_unique<UploadBuffer>(device, mat_max_size , sizeof(MatData), false);
-	MatCB->Resource()->SetName(L"Mat CB ");
 }
 
 FrameResource::~FrameResource()

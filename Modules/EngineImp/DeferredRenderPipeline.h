@@ -145,7 +145,7 @@ private:
 	void FreeMemToCompletedFrame(UINT64 frame_index);
 	void CopyFrameRescourceData(const GameTimer& gt, const FrameResourceOffset& offset);
 	void CopyObjectCBAndVertexData(const FrameResourceOffset& offset);
-	void CopyMatCBData();
+	void CopyMatCBData(const FrameResourceOffset& offset);
 	void CopyPassCBData(const GameTimer& gt, const FrameResourceOffset& offset);
 	FrameResComponentSize CalCurFrameContantsSize();
 

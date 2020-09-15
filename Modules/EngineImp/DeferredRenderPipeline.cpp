@@ -461,7 +461,7 @@ void CDeferredRenderPipeline::BuildDeferredPSO()
 
 void CDeferredRenderPipeline::BuildFrameResources()
 {
-	mFrameResources = std::make_unique<FrameResource>(md3dDevice.Get(), mMaterials.size());
+	mFrameResources = std::make_unique<FrameResource>(md3dDevice.Get());
 }
 
 void CDeferredRenderPipeline::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems, int layer)
@@ -777,11 +777,8 @@ void CDeferredRenderPipeline::DeferredDrawShadingPass()
 	CD3DX12_GPU_DESCRIPTOR_HANDLE h_des(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 	mCommandList->SetGraphicsRootDescriptorTable(1, h_des.Offset(mTextures.size(), mCbvSrvUavDescriptorSize));
 	mCommandList->SetGraphicsRootDescriptorTable(2, h_des.Offset(1, mCbvSrvUavDescriptorSize));
-	if (NULL != mFrameResources->MatCB)
-	{
-		auto matBuffer = mFrameResources->MatCB->Resource();
-		mCommandList->SetGraphicsRootShaderResourceView(3, matBuffer->GetGPUVirtualAddress());
-	}
+	auto matBuffer = mFrameResources->FrameResCB->Resource();
+	mCommandList->SetGraphicsRootShaderResourceView(3, matBuffer->GetGPUVirtualAddress() + m_frame_res_offset.back().MatBeginOffset);
 	
 	if (0 != mTextures.size())
 	{
@@ -895,7 +892,8 @@ void CDeferredRenderPipeline::UpdateFrameResource(const GameTimer& gt)
 	FrameResourceOffset  offset;
 	//初始值
 	offset.ObjectBeginOffset = m_frame_res_offset.empty() ? 0 : Align(m_frame_res_offset.back().EndResOffset, sizeof(ObjectConstants));
-	offset.PassBeginOffset = AlignForCrvAddress(mFrameResources->FrameResCB->Resource()->GetGPUVirtualAddress(), offset.ObjectBeginOffset + m_contants_size.ObjectCBSize);
+	offset.MatBeginOffset = offset.ObjectBeginOffset + m_contants_size.ObjectCBSize;
+	offset.PassBeginOffset = AlignForCrvAddress(mFrameResources->FrameResCB->Resource()->GetGPUVirtualAddress(), offset.MatBeginOffset + m_contants_size.MatCBSize);
 	offset.VertexBeginOffset = offset.PassBeginOffset + m_contants_size.PassCBSize;
 	offset.IndexBeginOffset = offset.VertexBeginOffset + m_contants_size.VertexCBSize;
 
@@ -929,7 +927,6 @@ void CDeferredRenderPipeline::UpdateFrameResource(const GameTimer& gt)
 	
 	offset.EndResOffset = offset.IndexBeginOffset + m_contants_size.IndexCBSize;
 	offset.EndResOffset %= mFrameResources->Size();
-	offset.Size = offset.EndResOffset >= offset.ObjectBeginOffset ? (offset.EndResOffset - offset.ObjectBeginOffset ) : (offset.EndResOffset + mFrameResources->Size() - offset.ObjectBeginOffset );
 	m_frame_res_offset.push(offset);
 
 	
@@ -948,67 +945,88 @@ bool CDeferredRenderPipeline::CanFillFrameRes(FrameResComponentSize& size, Frame
 	}
 	
 	//现在object buffer也要是连续的, vertex buffer和index buffer必须是连续的,因为frame buffer实际上是一个松散的结构
-	UINT tail_index = Align(m_frame_res_offset.back().EndResOffset + size.ObjectCBSize, sizeof(ObjectConstants));
-	if ( tail_index < mFrameResources->Size())
+	UINT tail_index = offset.ObjectBeginOffset + size.ObjectCBSize;
+	if ( tail_index <= mFrameResources->Size())
 	{
-		tail_index = Align(tail_index + size.PassCBSize, sizeof(PassConstants));
-		tail_index = tail_index;
 		//在Object区后还有位置
+		offset.MatBeginOffset = tail_index;
+		tail_index += size.MatCBSize;
 		if (tail_index <= mFrameResources->Size())
 		{
-			tail_index += size.VertexCBSize;
-			//Pass区后还有位置
+			tail_index = AlignForCrvAddress(mFrameResources->FrameResCB->Resource()->GetGPUVirtualAddress(), tail_index);
+			offset.PassBeginOffset = tail_index;
+			tail_index += size.PassCBSize;
 			if (tail_index <= mFrameResources->Size())
 			{
-				tail_index += size.IndexCBSize;
-				//Vertex之后还有位置
+				offset.VertexBeginOffset = tail_index;
+				tail_index += size.VertexCBSize;
+				//Pass区后还有位置
 				if (tail_index <= mFrameResources->Size())
 				{
-					return true;
+					offset.IndexBeginOffset = tail_index;
+					tail_index += size.IndexCBSize;
+					//Vertex之后还有位置
+					if (tail_index <= mFrameResources->Size())
+					{
+						return true;
+					}
+					offset.IndexBeginOffset = 0;
+					if (offset.IndexBeginOffset + size.IndexCBSize < m_frame_res_offset.front().ObjectBeginOffset)
+					{
+						return true;
+					}
+					return false;
 				}
-				offset.IndexBeginOffset = 0;
-				if (offset.IndexBeginOffset + size.IndexCBSize < m_frame_res_offset.front().ObjectBeginOffset)
+				else
 				{
-					return true;
+					offset.VertexBeginOffset = 0;
+					offset.IndexBeginOffset = offset.VertexBeginOffset + size.VertexCBSize;
+					if (offset.VertexBeginOffset + size.VertexCBSize + size.IndexCBSize < m_frame_res_offset.front().ObjectBeginOffset)
+					{
+						return true;
+					}
+					return false;
 				}
-				return false;
 			}
 			else
 			{
-				offset.VertexBeginOffset = 0;
-				offset.IndexBeginOffset = offset.VertexBeginOffset + size.VertexCBSize;
-				if (offset.VertexBeginOffset + size.VertexCBSize + size.IndexCBSize < m_frame_res_offset.front().ObjectBeginOffset)
+				//在Pass区换到头
+				offset.PassBeginOffset = AlignForCrvAddress(mFrameResources->FrameResCB->Resource()->GetGPUVirtualAddress(), 0);
+				if (offset.PassBeginOffset + size.PassCBSize + size.VertexCBSize + size.IndexCBSize >= m_frame_res_offset.front().ObjectBeginOffset)
 				{
-					return true;
+					return false;
 				}
-				return false;
+				offset.VertexBeginOffset = offset.PassBeginOffset + size.PassCBSize;
+				offset.IndexBeginOffset = offset.VertexBeginOffset + size.VertexCBSize; 
+				return true;
 			}
 		}
 		else
 		{
-			//在Pass区换到头
-			offset.PassBeginOffset = AlignForCrvAddress(mFrameResources->FrameResCB->Resource()->GetGPUVirtualAddress(), 0);
+			offset.MatBeginOffset = 0;
+			offset.PassBeginOffset = AlignForCrvAddress(mFrameResources->FrameResCB->Resource()->GetGPUVirtualAddress(), size.MatCBSize);
+			if (offset.PassBeginOffset + size.PassCBSize + size.VertexCBSize + size.IndexCBSize >= m_frame_res_offset.front().ObjectBeginOffset)
+			{
+				return false;
+			}
 			offset.VertexBeginOffset = offset.PassBeginOffset + size.PassCBSize;
 			offset.IndexBeginOffset = offset.VertexBeginOffset + size.VertexCBSize;
-			if (offset.PassBeginOffset + size.TotalSize - size.ObjectCBSize < m_frame_res_offset.front().ObjectBeginOffset)
-			{
-				return true;
-			}
-			return false;
+			return true;
 		}
 	}
 	else
 	{
 		//object buffer也要是连续的
 		offset.ObjectBeginOffset = 0;
-		offset.PassBeginOffset = AlignForCrvAddress(mFrameResources->FrameResCB->Resource()->GetGPUVirtualAddress(), m_frame_res_offset.back().EndResOffset + size.ObjectCBSize);
+		offset.MatBeginOffset = offset.ObjectBeginOffset + size.MatCBSize;
+		offset.PassBeginOffset = AlignForCrvAddress(mFrameResources->FrameResCB->Resource()->GetGPUVirtualAddress(), m_frame_res_offset.back().EndResOffset + size.ObjectCBSize + size.MatCBSize);
+		if (offset.PassBeginOffset + size.PassCBSize + size.VertexCBSize + size.IndexCBSize >= m_frame_res_offset.front().ObjectBeginOffset)
+		{
+			return false;
+		}
 		offset.VertexBeginOffset = offset.PassBeginOffset + size.PassCBSize;
 		offset.IndexBeginOffset = offset.VertexBeginOffset + size.VertexCBSize; 
-		if (offset.PassBeginOffset + size.TotalSize - size.ObjectCBSize < m_frame_res_offset.front().ObjectBeginOffset)
-		{
-			return true;
-		}
-		return false;
+		return true;
 	}
 
 
@@ -1024,12 +1042,9 @@ void CDeferredRenderPipeline::FreeMemToCompletedFrame(UINT64 frame_index)
 
 void CDeferredRenderPipeline::CopyFrameRescourceData(const GameTimer& gt, const FrameResourceOffset& offset)
 {
-	CopyMatCBData();
-
-	UINT begin_index = m_frame_res_offset.empty() ? 0 : m_frame_res_offset.back().EndResOffset;
 
 	CopyObjectCBAndVertexData(offset);
-
+	CopyMatCBData(offset);
 	CopyPassCBData(gt, offset);
 }
 
@@ -1093,10 +1108,10 @@ void CDeferredRenderPipeline::CopyObjectCBAndVertexData(const FrameResourceOffse
 	}
 }
 
-void CDeferredRenderPipeline::CopyMatCBData()
+void CDeferredRenderPipeline::CopyMatCBData(const FrameResourceOffset& offset)
 {
 	UINT matCBByteSize = sizeof(MatData);
-	auto currMaterialBuffer = mFrameResources->MatCB.get();
+	auto currMaterialBuffer = mFrameResources->FrameResCB.get() ;
 	for (auto& e : mMaterials)
 	{
 		Material* mat = e.second;
@@ -1113,7 +1128,7 @@ void CDeferredRenderPipeline::CopyMatCBData()
 			matData.NormalMapIndex = mat->NormalSrvHeapIndex;
 			
 			
-			currMaterialBuffer->CopyData(mat->MatCBIndex, &matData, 1);
+			currMaterialBuffer->CopyData(mat->MatCBIndex * sizeof(MatData) + offset.MatBeginOffset, &matData, sizeof(MatData));
 
 			mat->NumFramesDirty--;
 		}
@@ -1175,12 +1190,13 @@ FrameResComponentSize CDeferredRenderPipeline::CalCurFrameContantsSize()
 	res.PassCBSize = sizeof(PassConstants);
 	res.VertexCBSize = 0;
 	res.IndexCBSize = 0;
+	res.MatCBSize = mMaterials.size() * sizeof(MatData);
 	for (int i=0; i<mAllRitems.size(); ++i)
 	{
 		res.VertexCBSize += mAllRitems[i]->Data.Mesh.Vertices.size() * sizeof(VertexData);
 		res.IndexCBSize += mAllRitems[i]->Data.Mesh.Indices.size() * sizeof(std::uint16_t);
 	}
-	res.TotalSize = res.ObjectCBSize + res.PassCBSize + res.VertexCBSize + res.IndexCBSize;
+	res.TotalSize = res.ObjectCBSize + res.PassCBSize + res.VertexCBSize + res.IndexCBSize + res.MatCBSize;
 	return res;
 }
 
