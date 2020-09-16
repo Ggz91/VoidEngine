@@ -8,6 +8,9 @@ namespace BufferPredefines
 
 	const unsigned int MaxMatNum = 10;
 	const unsigned int MaxTextureNum = 10;
+
+	const unsigned int VertexPerCluster = 64;
+	const unsigned int ClusterPerChunk = 8;
 }
 
 #define UploadBufferChunkSize BufferPredefines::UploadChunkSize
@@ -15,3 +18,5 @@ namespace BufferPredefines
 #define HiZBufferMinSize BufferPredefines::HiZBufferMinSize
 #define MaxMatNum BufferPredefines::MaxMatNum
 #define MaxTextureNum BufferPredefines::MaxTextureNum
+#define ClusterPerChunk BufferPredefines::ClusterPerChunk
+#define VertexPerCluster BufferPredefines::VertexPerCluster

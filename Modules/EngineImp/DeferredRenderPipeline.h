@@ -6,6 +6,7 @@
 #include "../Common/RenderItems.h"
 #include <queue>
 #include "../Predefines/ScenePredefines.h"
+#include "../Predefines/BufferPredefines.h"
 
 class ShadowMap;
 class Ssao;
@@ -167,8 +168,8 @@ private:
 	UINT GetHiZMipmapLevels() const;
 	FrameResComponentSize m_contants_size;
 
+	//instance culling
 	void InstanceHiZCullingPass();
-	void ClusterHiZCullingPass();
 	void BuildHiZCullingRootSignature();
 	void BuildHiZCullingPSO();
 	ComPtr<ID3D12RootSignature> m_hiz_instance_culling_pass_root_signature = nullptr;
@@ -176,14 +177,30 @@ private:
 
 	//instance culling result
 	ComPtr<ID3D12Resource> m_instance_culling_result_buffer;
-	ComPtr<ID3D12Resource> m_culling_result_reset_buffer;
+	ComPtr<ID3D12Resource> m_counter_reset_buffer;
 	//mesh cluster culling result
 	ComPtr<ID3D12Resource> m_cluster_culling_result_buffer;
 	UINT AlignForUavCounter(UINT bufferSize);
 	const int ObjectConstantsBufferOffset = AlignForUavCounter(ScenePredefine::MaxObjectNumPerScene * sizeof(ObjectConstants));
-	UINT AlignForCrvAddress(const D3D12_GPU_VIRTUAL_ADDRESS& address, const UINT& offset);
+	const UINT CullingResMaxObjSize = AlignForUavCounter(sizeof(InstanceChunk) * ScenePredefine::MaxMeshVertexNumPerScene / (VertexPerCluster * ClusterPerChunk) );
+	
+	UINT64 AlignForCrvAddress(const D3D12_GPU_VIRTUAL_ADDRESS& address, const UINT& offset);
 	UINT Align(const UINT& size, const UINT& alignment);
 
 	std::vector<RenderItem*> GetVisibleRenderItems();
+
+	//Chunk expan
+	void ChunkExpanPass();
+	void BuildChunkExpanRootSignature();
+	void BuildChunkExpanPSO();
+	void CreateChunExpanBuffer();
+	ComPtr<ID3D12Resource> m_chunk_expan_result_buffer;
+	ComPtr<ID3D12RootSignature> m_chunk_expan_pass_root_signature = nullptr;
+	const UINT ChunkExpanSize = AlignForUavCounter(sizeof(ClusterChunk) * ScenePredefine::MaxMeshVertexNumPerObject / VertexPerCluster);
+
+	//Cluster Culling
+	void ClusterHiZCullingPass();
+	int m_descriptor_end = 0;
+	CD3DX12_GPU_DESCRIPTOR_HANDLE m_obj_handle;
 };
 

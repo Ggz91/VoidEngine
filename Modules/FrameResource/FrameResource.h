@@ -7,17 +7,30 @@
 
 struct IndirectCommand
 {
-	D3D12_GPU_VIRTUAL_ADDRESS cbv;
+	UINT cbv[2];
 	D3D12_DRAW_ARGUMENTS drawArguments;
+};
+
+struct InstanceChunk
+{
+    UINT InstanceID;
+    UINT ChunkID;
+};
+
+struct ClusterChunk
+{
+    UINT InstanceID;
+    UINT ClusterID;
+    AABB Bound;
 };
 
 struct ObjectConstants
 {
-    DirectX::XMFLOAT4X4 World = MathHelper::Identity4x4();
-	DirectX::XMFLOAT4X4 TexTransform = MathHelper::Identity4x4();
+ 	DirectX::XMFLOAT4X4 World = MathHelper::Identity4x4();
+    DirectX::XMFLOAT4X4 TexTransform = MathHelper::Identity4x4();
     AABB    Bounds;
-    UINT     MaterialIndex;
     IndirectCommand DrawCommand;
+	UINT     MaterialIndex;
 };
 
 struct SkinnedConstants
@@ -85,12 +98,12 @@ struct FrameResComponentSize
 struct FrameResourceOffset
 {
     UINT64 Fence;
-    UINT EndResOffset;
-    UINT VertexBeginOffset;
-    UINT IndexBeginOffset;
-    UINT ObjectBeginOffset;
-    UINT PassBeginOffset;
-    UINT MatBeginOffset;
+    UINT64 EndResOffset;
+    UINT64 VertexBeginOffset;
+    UINT64 IndexBeginOffset;
+    UINT64 ObjectBeginOffset;
+    UINT64 PassBeginOffset;
+    UINT64 MatBeginOffset;
 };
 
 // Stores the resources needed for the CPU to build the command lists
