@@ -366,7 +366,7 @@ void CDeferredRenderPipeline::BuildDescriptorHeaps()
 	instance_culling_uav.Buffer.CounterOffsetInBytes = CullingResMaxObjSize;
 	instance_culling_uav.Buffer.FirstElement = 0;
 	instance_culling_uav.Buffer.StructureByteStride = sizeof(InstanceChunk);
-	instance_culling_uav.Buffer.NumElements = ScenePredefine::MaxObjectNumPerScene;
+	instance_culling_uav.Buffer.NumElements = CullingResBufferMaxElementNum;
 	instance_culling_uav.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
 	md3dDevice->CreateUnorderedAccessView(m_instance_culling_result_buffer.Get(), m_instance_culling_result_buffer.Get(), &instance_culling_uav, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mTextures.size() + GBufferSize() + 1 + hiz_srv_desc.Texture2D.MipLevels, mCbvSrvUavDescriptorSize));
 
@@ -377,7 +377,7 @@ void CDeferredRenderPipeline::BuildDescriptorHeaps()
 	chunk_expan_uav.Buffer.CounterOffsetInBytes = ChunkExpanSize;
 	chunk_expan_uav.Buffer.FirstElement = 0;
 	chunk_expan_uav.Buffer.StructureByteStride = sizeof(ClusterChunk);
-	chunk_expan_uav.Buffer.NumElements = ScenePredefine::MaxMeshVertexNumPerObject / VertexPerCluster;
+	chunk_expan_uav.Buffer.NumElements = ChunkExpanBufferMaxElementNum;
 	chunk_expan_uav.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
 	md3dDevice->CreateUnorderedAccessView(m_chunk_expan_result_buffer.Get(), m_chunk_expan_result_buffer.Get(), &chunk_expan_uav, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mTextures.size() + GBufferSize() + 1 + hiz_srv_desc.Texture2D.MipLevels + 1, mCbvSrvUavDescriptorSize));
 
@@ -1702,6 +1702,8 @@ void CDeferredRenderPipeline::ChunkExpanPass()
 	mCommandList->SetComputeRootConstantBufferView(0, cur_cb->GetGPUVirtualAddress() + cur_offset.PassBeginOffset);
 	mCommandList->SetComputeRootDescriptorTable(2, m_obj_handle);
 
+	mCommandList->SetComputeRootConstantBufferView(4, m_instance_culling_result_buffer->GetGPUVirtualAddress() + CullingResMaxObjSize);
+
 	UINT size = CullingResMaxObjSize / BufferThreadSize;
 	size += (CullingResMaxObjSize % BufferThreadSize == 0) ? 0 : 1;
 	mCommandList->Dispatch(max(1, size), 1, 1);
@@ -1709,7 +1711,7 @@ void CDeferredRenderPipeline::ChunkExpanPass()
 
 void CDeferredRenderPipeline::BuildChunkExpanRootSignature()
 {
-	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
+	CD3DX12_ROOT_PARAMETER slotRootParameter[5];
 	
 	CD3DX12_DESCRIPTOR_RANGE instance_culling_res_buffer_table;
 	instance_culling_res_buffer_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0);
@@ -1726,8 +1728,11 @@ void CDeferredRenderPipeline::BuildChunkExpanRootSignature()
 	slotRootParameter[2].InitAsDescriptorTable(1, &obj_buffer_table);
 	//output buffer
 	slotRootParameter[3].InitAsDescriptorTable(1, &output_buffer_table);
+	//count
+	slotRootParameter[4].InitAsConstantBufferView(1);
 
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter,
+
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(5, slotRootParameter,
 		0, NULL,
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 

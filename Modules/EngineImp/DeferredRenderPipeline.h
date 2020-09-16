@@ -182,8 +182,8 @@ private:
 	ComPtr<ID3D12Resource> m_cluster_culling_result_buffer;
 	UINT AlignForUavCounter(UINT bufferSize);
 	const int ObjectConstantsBufferOffset = AlignForUavCounter(ScenePredefine::MaxObjectNumPerScene * sizeof(ObjectConstants));
-	const UINT CullingResMaxObjSize = AlignForUavCounter(sizeof(InstanceChunk) * ScenePredefine::MaxMeshVertexNumPerScene / (VertexPerCluster * ClusterPerChunk) );
-	
+	const UINT CullingResBufferMaxElementNum = ScenePredefine::MaxMeshVertexNumPerScene / (VertexPerCluster * ClusterPerChunk) + ((ScenePredefine::MaxMeshVertexNumPerScene % (VertexPerCluster * ClusterPerChunk)) ? 1 : 0);
+	const UINT CullingResMaxObjSize = AlignForUavCounter(sizeof(InstanceChunk) * CullingResBufferMaxElementNum);
 	UINT64 AlignForCrvAddress(const D3D12_GPU_VIRTUAL_ADDRESS& address, const UINT& offset);
 	UINT Align(const UINT& size, const UINT& alignment);
 
@@ -196,8 +196,8 @@ private:
 	void CreateChunExpanBuffer();
 	ComPtr<ID3D12Resource> m_chunk_expan_result_buffer;
 	ComPtr<ID3D12RootSignature> m_chunk_expan_pass_root_signature = nullptr;
-	const UINT ChunkExpanSize = AlignForUavCounter(sizeof(ClusterChunk) * ScenePredefine::MaxMeshVertexNumPerObject / VertexPerCluster);
-
+	const UINT ChunkExpanBufferMaxElementNum = ScenePredefine::MaxMeshVertexNumPerScene / VertexPerCluster + ((ScenePredefine::MaxMeshVertexNumPerScene % VertexPerCluster) ? 1 : 0);
+	const UINT ChunkExpanSize = AlignForUavCounter(sizeof(ClusterChunk) * ChunkExpanBufferMaxElementNum);
 	//Cluster Culling
 	void ClusterHiZCullingPass();
 	int m_descriptor_end = 0;
