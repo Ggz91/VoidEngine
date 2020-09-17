@@ -1149,6 +1149,7 @@ void CDeferredRenderPipeline::CopyObjectCBAndVertexData(const FrameResourceOffse
 		objConstants.DrawCommand.drawArguments.StartInstanceLocation = 0;
 		objConstants.DrawCommand.drawArguments.StartIndexLocation = e->StartIndexLocation;
 		objConstants.DrawCommand.drawArguments.InstanceCount = e->Data.Mesh.Indices.size();
+		objConstants.DrawCommand.drawArguments.BaseVertexLocation = e->BaseVertexLocation;
 		if (NULL != e->Mat)
 		{
 			objConstants.MaterialIndex = e->Mat->MatCBIndex;
