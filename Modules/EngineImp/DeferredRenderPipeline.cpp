@@ -284,7 +284,7 @@ void CDeferredRenderPipeline::BuildRootSignature()
 {
 	BuildDeferredRootSignature();
 	BuildHiZRootSignature();
-	BuildHiZCullingRootSignature();
+	BuildHiZInstanceCullingRootSignature();
 	BuildChunkExpanRootSignature();
 }
 
@@ -423,7 +423,7 @@ void CDeferredRenderPipeline::BuildPSOs()
 {
 	BuildDeferredPSO();
 	BuildHiZPSO();
-	BuildHiZCullingPSO();
+	BuildHiZInstanceCullingPSO();
 	BuildChunkExpanPSO();
 }
 
@@ -522,7 +522,6 @@ void CDeferredRenderPipeline::DrawRenderItems(ID3D12GraphicsCommandList* cmdList
 	ibv.Format = DXGI_FORMAT_R16_UINT;
 	ibv.SizeInBytes = m_contants_size.IndexCBSize;
 	cmdList->IASetIndexBuffer(&ibv);
-
 
 	for (size_t i = 0; i < ritems.size(); ++i)
 	{
@@ -1100,19 +1099,30 @@ void CDeferredRenderPipeline::CopyObjectCBAndVertexData(const FrameResourceOffse
 		XMMATRIX world = XMLoadFloat4x4(&e->World);
 		XMMATRIX texTransform = XMLoadFloat4x4(&e->TexTransform);
 
+		//copy vertex
+		curr_cb->CopyData(vertex_offset, e->Data.Mesh.Vertices.data(), vertexCBByteSize * e->Data.Mesh.Vertices.size());
+		vertex_offset += vertexCBByteSize * e->Data.Mesh.Vertices.size();
+		e->BaseVertexLocation = start_vertex_index;
+		start_vertex_index += e->Data.Mesh.Vertices.size();
+
+		//copy index
+		curr_cb->CopyData(index_offset, e->Data.Mesh.Indices.data(), indexCBByteSize * e->Data.Mesh.Indices.size());
+		index_offset += indexCBByteSize * e->Data.Mesh.Indices.size();
+		e->StartIndexLocation = start_index_index;
+		start_index_index += e->Data.Mesh.Indices.size();
+		e->IndexCount = e->Data.Mesh.Indices.size();
+
 		//copy object data
 		ObjectConstants objConstants;
 		objConstants.Bounds.MaxVertex = e->Bounds.MaxVertex;
 		objConstants.Bounds.MinVertex = e->Bounds.MinVertex;
 		XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
 		XMStoreFloat4x4(&objConstants.TexTransform, XMMatrixTranspose(texTransform));
-		D3D12_GPU_VIRTUAL_ADDRESS address = curr_cb->Resource()->GetGPUVirtualAddress() + object_offset;
-		objConstants.DrawCommand.cbv[0] = address >> 32;
-		objConstants.DrawCommand.cbv[1] = address & 0x00000000FFFFFFFF;
+		D3D12_GPU_VIRTUAL_ADDRESS address = curr_cb->Resource()->GetGPUVirtualAddress() + vertex_offset;
 		objConstants.DrawCommand.drawArguments.InstanceCount = 1;
-		objConstants.DrawCommand.drawArguments.StartInstanceLocation = e->StartIndexLocation;
-		objConstants.DrawCommand.drawArguments.StartVertexLocation = e->BaseVertexLocation;
-		objConstants.DrawCommand.drawArguments.VertexCountPerInstance = e->Data.Mesh.Vertices.size();
+		objConstants.DrawCommand.drawArguments.StartInstanceLocation = 0;
+		objConstants.DrawCommand.drawArguments.StartIndexLocation = e->StartIndexLocation;
+		objConstants.DrawCommand.drawArguments.InstanceCount = e->Data.Mesh.Indices.size();
 		if (NULL != e->Mat)
 		{
 			objConstants.MaterialIndex = e->Mat->MatCBIndex;
@@ -1121,18 +1131,7 @@ void CDeferredRenderPipeline::CopyObjectCBAndVertexData(const FrameResourceOffse
 		curr_cb->CopyData(object_offset , &objConstants, objCBByteSize );
 		object_offset += objCBByteSize;
 
-		//copy vertex
-		curr_cb->CopyData(vertex_offset , e->Data.Mesh.Vertices.data(), vertexCBByteSize * e->Data.Mesh.Vertices.size());
-			vertex_offset += vertexCBByteSize * e->Data.Mesh.Vertices.size();
-			e->BaseVertexLocation = start_vertex_index;
-			start_vertex_index += e->Data.Mesh.Vertices.size();
 		
-		//copy index
-		curr_cb->CopyData(index_offset , e->Data.Mesh.Indices.data(), indexCBByteSize * e->Data.Mesh.Indices.size() );
-		index_offset += indexCBByteSize * e->Data.Mesh.Indices.size();
-		e->StartIndexLocation = start_index_index;
-		start_index_index += e->Data.Mesh.Indices.size();
-		e->IndexCount = e->Data.Mesh.Indices.size();
 				
 	}
 }
@@ -1546,7 +1545,21 @@ void CDeferredRenderPipeline::ClusterHiZCullingPass()
 
 }
 
-void CDeferredRenderPipeline::BuildHiZCullingRootSignature()
+void CDeferredRenderPipeline::BuildClusterHiZCullingPSO()
+{
+	D3D12_COMPUTE_PIPELINE_STATE_DESC hiz_cluster_culling_pso_desc;
+	ZeroMemory(&hiz_cluster_culling_pso_desc, sizeof(D3D12_COMPUTE_PIPELINE_STATE_DESC));
+	hiz_cluster_culling_pso_desc.pRootSignature = m_hiz_cluster_culling_pass_root_signature.Get();
+	hiz_cluster_culling_pso_desc.CS =
+	{
+		reinterpret_cast<BYTE*>(mShaders["HiZClusterCulling"]->GetBufferPointer()),
+		mShaders["HiZClusterCulling"]->GetBufferSize()
+	};
+	hiz_cluster_culling_pso_desc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+	ThrowIfFailed(md3dDevice->CreateComputePipelineState(&hiz_cluster_culling_pso_desc, IID_PPV_ARGS(&mPSOs["HiZClusterCulling"])));
+}
+
+void CDeferredRenderPipeline::BuildHiZInstanceCullingRootSignature()
 {
 	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
 	CD3DX12_DESCRIPTOR_RANGE hiz_buffer_table;
@@ -1595,36 +1608,9 @@ void CDeferredRenderPipeline::BuildHiZCullingRootSignature()
 		serializedRootSig->GetBufferSize(),
 		IID_PPV_ARGS(m_hiz_instance_culling_pass_root_signature.GetAddressOf())));
 
-// 	CD3DX12_DESCRIPTOR_RANGE1 pass_range[1];
-// 	pass_range[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
-// 	
-// 	CD3DX12_DESCRIPTOR_RANGE1 hiz_range[1];
-// 	hiz_range[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
-// 	CD3DX12_DESCRIPTOR_RANGE1 object_range[1];
-// 	object_range[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
-// 	CD3DX12_DESCRIPTOR_RANGE1 output_range[1];
-// 	output_range[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE);
-// 
-// 	CD3DX12_ROOT_PARAMETER1 slotRootParameter[4];
-// 	//object buffer
-// 	slotRootParameter[0].InitAsDescriptorTable(1, pass_range);
-// 	slotRootParameter[1].InitAsDescriptorTable(1, hiz_range);
-// 	slotRootParameter[2].InitAsDescriptorTable(1, object_range);
-// 	slotRootParameter[3].InitAsDescriptorTable(1, output_range);
-// 
-// 	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc;
-// 	rootSigDesc.Init_1_1(_countof(slotRootParameter), slotRootParameter);
-// 	ComPtr<ID3DBlob> serializedRootSig = nullptr;
-// 	ComPtr<ID3DBlob> errorBlob = nullptr;
-// 	ThrowIfFailed(D3DX12SerializeVersionedRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1_1, &serializedRootSig, &errorBlob));
-// 	ThrowIfFailed(md3dDevice->CreateRootSignature(
-// 		0,
-// 		serializedRootSig->GetBufferPointer(),
-// 		serializedRootSig->GetBufferSize(),
-// 		IID_PPV_ARGS(m_hiz_instance_culling_pass_root_signature.GetAddressOf())));
 }
 
-void CDeferredRenderPipeline::BuildHiZCullingPSO()
+void CDeferredRenderPipeline::BuildHiZInstanceCullingPSO()
 {
 	D3D12_COMPUTE_PIPELINE_STATE_DESC hiz_instance_culling_pso_desc = {};
 	hiz_instance_culling_pso_desc.pRootSignature = m_hiz_instance_culling_pass_root_signature.Get();
@@ -1635,16 +1621,7 @@ void CDeferredRenderPipeline::BuildHiZCullingPSO()
 	};
 	ThrowIfFailed(md3dDevice->CreateComputePipelineState(&hiz_instance_culling_pso_desc, IID_PPV_ARGS(&mPSOs["HiZInstanceCulling"])));
 
-	/*D3D12_COMPUTE_PIPELINE_STATE_DESC hiz_cluster_culling_pso_desc;
-	ZeroMemory(&hiz_cluster_culling_pso_desc, sizeof(D3D12_COMPUTE_PIPELINE_STATE_DESC));
-	hiz_cluster_culling_pso_desc.pRootSignature = m_hiz_cluster_culling_pass_root_signature.Get();
-	hiz_cluster_culling_pso_desc.CS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["HiZClusterCulling"]->GetBufferPointer()),
-		mShaders["HiZClusterCulling"]->GetBufferSize()
-	};
-	hiz_cluster_culling_pso_desc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
-	ThrowIfFailed(md3dDevice->CreateComputePipelineState(&hiz_cluster_culling_pso_desc, IID_PPV_ARGS(&mPSOs["HiZClusterCulling"])));*/
+	
 }
 
 UINT  CDeferredRenderPipeline::AlignForUavCounter(UINT bufferSize)
@@ -1699,10 +1676,9 @@ void CDeferredRenderPipeline::ChunkExpanPass()
 	auto cur_cb = mFrameResources->FrameResCB->Resource();
 	auto cur_offset = m_frame_res_offset.back();
 
-	mCommandList->SetComputeRootConstantBufferView(0, cur_cb->GetGPUVirtualAddress() + cur_offset.PassBeginOffset);
+	mCommandList->SetComputeRootConstantBufferView(0, m_instance_culling_result_buffer->GetGPUVirtualAddress() + CullingResMaxObjSize);
 	mCommandList->SetComputeRootDescriptorTable(2, m_obj_handle);
 
-	mCommandList->SetComputeRootConstantBufferView(4, m_instance_culling_result_buffer->GetGPUVirtualAddress() + CullingResMaxObjSize);
 
 	UINT size = CullingResMaxObjSize / BufferThreadSize;
 	size += (CullingResMaxObjSize % BufferThreadSize == 0) ? 0 : 1;
@@ -1711,7 +1687,7 @@ void CDeferredRenderPipeline::ChunkExpanPass()
 
 void CDeferredRenderPipeline::BuildChunkExpanRootSignature()
 {
-	CD3DX12_ROOT_PARAMETER slotRootParameter[5];
+	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
 	
 	CD3DX12_DESCRIPTOR_RANGE instance_culling_res_buffer_table;
 	instance_culling_res_buffer_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0);
@@ -1720,7 +1696,7 @@ void CDeferredRenderPipeline::BuildChunkExpanRootSignature()
 	CD3DX12_DESCRIPTOR_RANGE output_buffer_table;
 	output_buffer_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 0);
 
-	//pass buffer
+	//count buffer
 	slotRootParameter[0].InitAsConstantBufferView(0);
 	//instance culling res buffer
 	slotRootParameter[1].InitAsDescriptorTable(1, &instance_culling_res_buffer_table);
@@ -1728,11 +1704,9 @@ void CDeferredRenderPipeline::BuildChunkExpanRootSignature()
 	slotRootParameter[2].InitAsDescriptorTable(1, &obj_buffer_table);
 	//output buffer
 	slotRootParameter[3].InitAsDescriptorTable(1, &output_buffer_table);
-	//count
-	slotRootParameter[4].InitAsConstantBufferView(1);
 
 
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(5, slotRootParameter,
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter,
 		0, NULL,
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 

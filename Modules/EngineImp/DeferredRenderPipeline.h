@@ -170,16 +170,13 @@ private:
 
 	//instance culling
 	void InstanceHiZCullingPass();
-	void BuildHiZCullingRootSignature();
-	void BuildHiZCullingPSO();
+	void BuildHiZInstanceCullingRootSignature();
+	void BuildHiZInstanceCullingPSO();
 	ComPtr<ID3D12RootSignature> m_hiz_instance_culling_pass_root_signature = nullptr;
-	ComPtr<ID3D12RootSignature> m_hiz_cluster_culling_pass_root_signature = nullptr;
 
 	//instance culling result
 	ComPtr<ID3D12Resource> m_instance_culling_result_buffer;
 	ComPtr<ID3D12Resource> m_counter_reset_buffer;
-	//mesh cluster culling result
-	ComPtr<ID3D12Resource> m_cluster_culling_result_buffer;
 	UINT AlignForUavCounter(UINT bufferSize);
 	const int ObjectConstantsBufferOffset = AlignForUavCounter(ScenePredefine::MaxObjectNumPerScene * sizeof(ObjectConstants));
 	const UINT CullingResBufferMaxElementNum = ScenePredefine::MaxMeshVertexNumPerScene / (VertexPerCluster * ClusterPerChunk) + ((ScenePredefine::MaxMeshVertexNumPerScene % (VertexPerCluster * ClusterPerChunk)) ? 1 : 0);
@@ -198,9 +195,15 @@ private:
 	ComPtr<ID3D12RootSignature> m_chunk_expan_pass_root_signature = nullptr;
 	const UINT ChunkExpanBufferMaxElementNum = ScenePredefine::MaxMeshVertexNumPerScene / VertexPerCluster + ((ScenePredefine::MaxMeshVertexNumPerScene % VertexPerCluster) ? 1 : 0);
 	const UINT ChunkExpanSize = AlignForUavCounter(sizeof(ClusterChunk) * ChunkExpanBufferMaxElementNum);
-	//Cluster Culling
-	void ClusterHiZCullingPass();
+
 	int m_descriptor_end = 0;
 	CD3DX12_GPU_DESCRIPTOR_HANDLE m_obj_handle;
+
+	//Cluster Culling
+	void ClusterHiZCullingPass();
+	void BuildClusterHiZCullingPSO();
+	ComPtr<ID3D12Resource> m_cluster_culling_result_buffer;
+	ComPtr<ID3D12RootSignature> m_hiz_cluster_culling_pass_root_signature = nullptr;
+
 };
 

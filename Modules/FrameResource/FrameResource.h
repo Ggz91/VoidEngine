@@ -7,8 +7,7 @@
 
 struct IndirectCommand
 {
-	UINT cbv[2];
-	D3D12_DRAW_ARGUMENTS drawArguments;
+    D3D12_DRAW_INDEXED_ARGUMENTS drawArguments;
 };
 
 struct InstanceChunk
@@ -21,7 +20,6 @@ struct ClusterChunk
 {
     UINT InstanceID;
     UINT ClusterID;
-    AABB Bound;
 };
 
 struct ObjectConstants
