@@ -106,8 +106,14 @@ void CDeferredRenderPipeline::CreateRtvAndDsvDescriptorHeaps()
 	//Hi-Z
 	CreateHiZBuffer();
 
+	//Instance Culling
+	CreateHiZInstanceCullingBuffers();
+
 	//Chunk Expan
 	CreateChunExpanBuffer();
+
+	//Cluster Culling
+	CreateHIZClusterCullingBuffers();
 }
 
 void CDeferredRenderPipeline::OnResize()
@@ -166,6 +172,7 @@ void CDeferredRenderPipeline::DrawWithDeferredTexturing(const GameTimer& gt)
 	HiZPass();
 	InstanceHiZCullingPass();
 	ChunkExpanPass();
+	ClusterHiZCullingPass();
 	//DeferredDrawFillGBufferPass();
 	//DeferredDrawShadingPass();
 
@@ -286,6 +293,7 @@ void CDeferredRenderPipeline::BuildRootSignature()
 	BuildHiZRootSignature();
 	BuildHiZInstanceCullingRootSignature();
 	BuildChunkExpanRootSignature();
+	BuildClusterHiZCullingRootSignature();
 }
 
 
@@ -298,8 +306,11 @@ void CDeferredRenderPipeline::BuildDescriptorHeaps()
 	//+1 for instance culling res
 	//+1 for instance culling object buffer 
 	//+1 for chunk expan buffer
+	//+1 for cluster culling buffer
+	//+1 for vertex buffer / dynamic
+	//+1 for index buffer /dynamic
 	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-	srvHeapDesc.NumDescriptors = mTextures.size() +GBufferSize() + 1 + GetHiZMipmapLevels() + 1 + 1 + 1;
+	srvHeapDesc.NumDescriptors = mTextures.size() +GBufferSize() + 1 + GetHiZMipmapLevels() + 1 + 1 + 1 + 1 + 1 + 1;
 	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
@@ -374,14 +385,25 @@ void CDeferredRenderPipeline::BuildDescriptorHeaps()
 	D3D12_UNORDERED_ACCESS_VIEW_DESC chunk_expan_uav = {};
 	chunk_expan_uav.Format = DXGI_FORMAT_UNKNOWN;
 	chunk_expan_uav.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-	chunk_expan_uav.Buffer.CounterOffsetInBytes = ChunkExpanSize;
+	chunk_expan_uav.Buffer.CounterOffsetInBytes = ChunkExpanMaxSize;
 	chunk_expan_uav.Buffer.FirstElement = 0;
 	chunk_expan_uav.Buffer.StructureByteStride = sizeof(ClusterChunk);
 	chunk_expan_uav.Buffer.NumElements = ChunkExpanBufferMaxElementNum;
 	chunk_expan_uav.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
 	md3dDevice->CreateUnorderedAccessView(m_chunk_expan_result_buffer.Get(), m_chunk_expan_result_buffer.Get(), &chunk_expan_uav, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mTextures.size() + GBufferSize() + 1 + hiz_srv_desc.Texture2D.MipLevels + 1, mCbvSrvUavDescriptorSize));
 
-	m_descriptor_end = mTextures.size() + GBufferSize() + 1 + hiz_srv_desc.Texture2D.MipLevels + 1;
+	//cluster culling res buffer
+	D3D12_UNORDERED_ACCESS_VIEW_DESC cluster_culling_uav = {};
+	cluster_culling_uav.Format = DXGI_FORMAT_UNKNOWN;
+	cluster_culling_uav.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+	cluster_culling_uav.Buffer.CounterOffsetInBytes = ClusterCullingResMaxSize;
+	cluster_culling_uav.Buffer.FirstElement = 0;
+	cluster_culling_uav.Buffer.StructureByteStride = sizeof(IndirectCommand);
+	cluster_culling_uav.Buffer.NumElements = ChunkExpanBufferMaxElementNum;
+	cluster_culling_uav.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+	md3dDevice->CreateUnorderedAccessView(m_cluster_culling_result_buffer.Get(), m_cluster_culling_result_buffer.Get(), &cluster_culling_uav, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mTextures.size() + GBufferSize() + 1 + hiz_srv_desc.Texture2D.MipLevels + 1 + 1, mCbvSrvUavDescriptorSize));
+
+	m_descriptor_end = mTextures.size() + GBufferSize() + 1 + hiz_srv_desc.Texture2D.MipLevels + 1 + 1;
 }
 
 void CDeferredRenderPipeline::BuildShadersAndInputLayout()
@@ -402,12 +424,15 @@ void CDeferredRenderPipeline::BuildShadersAndInputLayout()
 		NULL, NULL
 	};
 
-	//hi-z culling
-	mShaders["HiZInstanceCulling"] = d3dUtil::CompileShader(L".\\Shaders\\HiZCulling.hlsl", compute_macros, "HiZInstanceCulling", "cs_5_1");
-	mShaders["HiZClusterCulling"] = d3dUtil::CompileShader(L".\\Shaders\\HiZCulling.hlsl", nullptr, "HiZClusterCulling", "cs_5_1");
+	//hi-z instance culling
+	mShaders["HiZInstanceCulling"] = d3dUtil::CompileShader(L".\\Shaders\\HiZInstanceCulling.hlsl", compute_macros, "HiZInstanceCulling", "cs_5_1");
+	
 
 	//chunk expan
 	mShaders["ChunkExpan"] = d3dUtil::CompileShader(L".\\Shaders\\ChunkExpan.hlsl", compute_macros, "ChunkExpan", "cs_5_1");
+
+	//cluster culling
+	mShaders["HiZClusterCulling"] = d3dUtil::CompileShader(L".\\Shaders\\HiZClusterCulling.hlsl", nullptr, "HiZClusterCulling", "cs_5_1");
 
 	mInputLayout =
 	{
@@ -425,6 +450,7 @@ void CDeferredRenderPipeline::BuildPSOs()
 	BuildHiZPSO();
 	BuildHiZInstanceCullingPSO();
 	BuildChunkExpanPSO();
+	BuildClusterHiZCullingPSO();
 }
 
 void CDeferredRenderPipeline::BuildDeferredPSO()
@@ -1261,32 +1287,7 @@ void CDeferredRenderPipeline::CreateHiZBuffer()
 	CD3DX12_CPU_DESCRIPTOR_HANDLE h(CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), SwapChainBufferCount + GBufferSize(), mRtvDescriptorSize));
 	md3dDevice->CreateRenderTargetView(m_hiz_buffer.Get(), &rt_desc, h);
 
-	//instance culling result
-	//buffer layout : N * ObjectConstants + Counter
-	ThrowIfFailed(md3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
-		D3D12_HEAP_FLAG_NONE,
-		&CD3DX12_RESOURCE_DESC::Buffer(CullingResMaxObjSize + sizeof(UINT), D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
-		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-		nullptr,
-		IID_PPV_ARGS(&m_instance_culling_result_buffer)));
-
-	m_instance_culling_result_buffer->SetName(L"HiZ-Instance-Culling-Result-Buffer");
-
-	//count null的buffer
-	ThrowIfFailed(md3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
-		D3D12_HEAP_FLAG_NONE,
-		&CD3DX12_RESOURCE_DESC::Buffer(sizeof(UINT)),
-		D3D12_RESOURCE_STATE_GENERIC_READ,
-		nullptr,
-		IID_PPV_ARGS(&m_counter_reset_buffer)));
 	
-	m_counter_reset_buffer->SetName(L"HiZ result reset buffer");
-
-	D3D12_RANGE zero_range = { 0, 0 };
-	UINT8* null_data = nullptr;
-	m_counter_reset_buffer->Map(0, &zero_range, reinterpret_cast<void**> (&null_data));
-	ZeroMemory(&null_data, sizeof(UINT));
-	m_counter_reset_buffer->Unmap(0, nullptr);
 
 }
 
@@ -1522,7 +1523,7 @@ void CDeferredRenderPipeline::InstanceHiZCullingPass()
 
 	//动态绑定ring buffer中的资源
 	m_obj_handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-	m_obj_handle.Offset(m_descriptor_end + 1, mCbvSrvUavDescriptorSize);
+	m_obj_handle.Offset(m_descriptor_end + HO_Object, mCbvSrvUavDescriptorSize);
 	D3D12_SHADER_RESOURCE_VIEW_DESC obj_srv_desc = {};
 	obj_srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 	obj_srv_desc.Format = DXGI_FORMAT_UNKNOWN;
@@ -1531,7 +1532,7 @@ void CDeferredRenderPipeline::InstanceHiZCullingPass()
 	obj_srv_desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 	obj_srv_desc.Buffer.NumElements = ScenePredefine::MaxObjectNumPerScene;
 	obj_srv_desc.Buffer.StructureByteStride = sizeof(ObjectConstants);
-	md3dDevice->CreateShaderResourceView(mFrameResources->FrameResCB->Resource(), &obj_srv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), m_descriptor_end + 1, mCbvSrvUavDescriptorSize));
+	md3dDevice->CreateShaderResourceView(mFrameResources->FrameResCB->Resource(), &obj_srv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), m_descriptor_end + HO_Object, mCbvSrvUavDescriptorSize));
 
 	mCommandList->SetComputeRootConstantBufferView(0, cur_cb->GetGPUVirtualAddress() + cur_offset.PassBeginOffset);
 	mCommandList->SetComputeRootDescriptorTable(2, m_obj_handle);
@@ -1542,7 +1543,63 @@ void CDeferredRenderPipeline::InstanceHiZCullingPass()
 
 void CDeferredRenderPipeline::ClusterHiZCullingPass()
 {
+	//根据instance的包围盒结合HiZ进行剔除
+	mCommandList->SetPipelineState(mPSOs["HiZClusterCulling"].Get());
+	mCommandList->SetComputeRootSignature(m_hiz_cluster_culling_pass_root_signature.Get());
 
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_cluster_culling_result_buffer.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST));
+	//重置数据
+	mCommandList->CopyBufferRegion(m_cluster_culling_result_buffer.Get(), ClusterCullingResMaxSize, m_counter_reset_buffer.Get(), 0, sizeof(UINT));
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_cluster_culling_result_buffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+
+	//绑定描述符
+	CD3DX12_GPU_DESCRIPTOR_HANDLE h_input_cluster(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	CD3DX12_GPU_DESCRIPTOR_HANDLE h_output_culling(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+
+	h_input_cluster.Offset(mTextures.size() + GBufferSize() + 1 + GetHiZMipmapLevels() + 1, mCbvSrvUavDescriptorSize);
+	h_output_culling.Offset(mTextures.size() + GBufferSize() + 1 + GetHiZMipmapLevels() + 1 + 1, mCbvSrvUavDescriptorSize);
+
+	mCommandList->SetComputeRootDescriptorTable(0, h_input_cluster);
+	mCommandList->SetComputeRootDescriptorTable(6, h_output_culling);
+
+	auto cur_cb = mFrameResources->FrameResCB->Resource();
+	auto cur_offset = m_frame_res_offset.back();
+	
+	CD3DX12_GPU_DESCRIPTOR_HANDLE h_hiz(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	h_hiz.Offset(mTextures.size() + GBufferSize()+1, mCbvSrvUavDescriptorSize);
+	mCommandList->SetComputeRootDescriptorTable(1, m_obj_handle);
+	mCommandList->SetComputeRootDescriptorTable(2, h_hiz);
+	mCommandList->SetComputeRootConstantBufferView(3, cur_cb->GetGPUVirtualAddress() + cur_offset.PassBeginOffset);
+	
+	//动态绑定vertex buffer 和index buffer
+	D3D12_SHADER_RESOURCE_VIEW_DESC vertex_srv_desc = {};
+	vertex_srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	vertex_srv_desc.Format = DXGI_FORMAT_UNKNOWN;
+	vertex_srv_desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+	vertex_srv_desc.Buffer.FirstElement = cur_offset.VertexBeginOffset / sizeof(VertexData) + GetRenderLayerObjectOffset((int)RenderLayer::Opaque);
+	vertex_srv_desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+	vertex_srv_desc.Buffer.NumElements = m_contants_size.VertexCBSize / sizeof(VertexData);
+	vertex_srv_desc.Buffer.StructureByteStride = sizeof(VertexData);
+	md3dDevice->CreateShaderResourceView(mFrameResources->FrameResCB->Resource(), &vertex_srv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), m_descriptor_end + HO_Vertex, mCbvSrvUavDescriptorSize));
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC index_srv_desc = {};
+	index_srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	index_srv_desc.Format = DXGI_FORMAT_UNKNOWN;
+	index_srv_desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+	index_srv_desc.Buffer.FirstElement = cur_offset.IndexBeginOffset / sizeof(std::uint16_t) + GetRenderLayerObjectOffset((int)RenderLayer::Opaque);
+	index_srv_desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+	index_srv_desc.Buffer.NumElements = m_contants_size.IndexCBSize / sizeof(std::uint16_t);
+	index_srv_desc.Buffer.StructureByteStride = sizeof(std::uint16_t);
+	md3dDevice->CreateShaderResourceView(mFrameResources->FrameResCB->Resource(), &index_srv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), m_descriptor_end + HO_Index, mCbvSrvUavDescriptorSize));
+
+	CD3DX12_GPU_DESCRIPTOR_HANDLE h_vertex_index(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	h_vertex_index.Offset(m_descriptor_end + HO_Vertex, mCbvSrvUavDescriptorSize);
+	mCommandList->SetComputeRootDescriptorTable(4, h_vertex_index);
+	mCommandList->SetComputeRootDescriptorTable(5, h_vertex_index.Offset(1, mCbvSrvUavDescriptorSize));
+
+	UINT size = ClusterCullingResMaxSize / BufferThreadSize;
+	size += (ClusterCullingResMaxSize % BufferThreadSize == 0) ? 0 : 1;
+	mCommandList->Dispatch(max(1, size), 1, 1);
 }
 
 void CDeferredRenderPipeline::BuildClusterHiZCullingPSO()
@@ -1559,6 +1616,86 @@ void CDeferredRenderPipeline::BuildClusterHiZCullingPSO()
 	ThrowIfFailed(md3dDevice->CreateComputePipelineState(&hiz_cluster_culling_pso_desc, IID_PPV_ARGS(&mPSOs["HiZClusterCulling"])));
 }
 
+void CDeferredRenderPipeline::BuildClusterHiZCullingRootSignature()
+{
+	CD3DX12_ROOT_PARAMETER slotRootParameter[7];
+	//cluster chunk buffer (consume buffer)
+	CD3DX12_DESCRIPTOR_RANGE cluster_chunk_buffer;
+	cluster_chunk_buffer.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+	
+	//object buffer
+	CD3DX12_DESCRIPTOR_RANGE object_buffer;
+	object_buffer.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+
+	//hi z
+	CD3DX12_DESCRIPTOR_RANGE hiz_buffer;
+	hiz_buffer.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+
+	//pass buffer,constant buffer
+
+	//vertex buffer
+	CD3DX12_DESCRIPTOR_RANGE vertex_buffer_table;
+	vertex_buffer_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2);
+	//index buffer
+	CD3DX12_DESCRIPTOR_RANGE index_buffer_table;
+	index_buffer_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 3);
+	
+	//out put buffer
+	CD3DX12_DESCRIPTOR_RANGE output_buffer;
+	output_buffer.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
+
+	slotRootParameter[0].InitAsDescriptorTable(1, &cluster_chunk_buffer);
+	slotRootParameter[1].InitAsDescriptorTable(1, &object_buffer);
+	slotRootParameter[2].InitAsDescriptorTable(1, &hiz_buffer);
+	slotRootParameter[3].InitAsConstantBufferView(0);
+	slotRootParameter[4].InitAsDescriptorTable(1, &vertex_buffer_table);
+	slotRootParameter[5].InitAsDescriptorTable(1, &index_buffer_table);
+	slotRootParameter[6].InitAsDescriptorTable(1, &output_buffer);
+
+	const CD3DX12_STATIC_SAMPLER_DESC sampler_desc(
+		0, // shaderRegister
+		D3D12_FILTER_MIN_MAG_MIP_POINT, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP); // addressW
+
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(7, slotRootParameter,
+		1, &sampler_desc,
+		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+	// create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
+	ComPtr<ID3DBlob> serializedRootSig = nullptr;
+	ComPtr<ID3DBlob> errorBlob = nullptr;
+	HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
+
+	if (errorBlob != nullptr)
+	{
+		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+	}
+	ThrowIfFailed(hr);
+
+	ThrowIfFailed(md3dDevice->CreateRootSignature(
+		0,
+		serializedRootSig->GetBufferPointer(),
+		serializedRootSig->GetBufferSize(),
+		IID_PPV_ARGS(m_hiz_cluster_culling_pass_root_signature.GetAddressOf())));
+}
+
+void CDeferredRenderPipeline::CreateHIZClusterCullingBuffers()
+{
+	//instance culling result
+	//buffer layout : N * ObjectConstants + Counter
+	ThrowIfFailed(md3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(ClusterCullingResMaxSize + sizeof(UINT), D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
+		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+		nullptr,
+		IID_PPV_ARGS(&m_cluster_culling_result_buffer)));
+
+	m_cluster_culling_result_buffer->SetName(L"Cluster-Culling-Result-Buffer");
+}
+
 void CDeferredRenderPipeline::BuildHiZInstanceCullingRootSignature()
 {
 	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
@@ -1572,9 +1709,9 @@ void CDeferredRenderPipeline::BuildHiZInstanceCullingRootSignature()
 	//pass buffer
 	slotRootParameter[0].InitAsConstantBufferView(0);
 
-	//object buffer
-	slotRootParameter[1].InitAsDescriptorTable(1, &hiz_buffer_table);
 	//hi z buffer
+	slotRootParameter[1].InitAsDescriptorTable(1, &hiz_buffer_table);
+	//object buffer
 	slotRootParameter[2].InitAsDescriptorTable(1, &obj_buffer_table);
 	//output buffer
 	slotRootParameter[3].InitAsDescriptorTable(1, &output_buffer_table);
@@ -1624,6 +1761,36 @@ void CDeferredRenderPipeline::BuildHiZInstanceCullingPSO()
 	
 }
 
+void CDeferredRenderPipeline::CreateHiZInstanceCullingBuffers()
+{
+	//instance culling result
+	//buffer layout : N * ObjectConstants + Counter
+	ThrowIfFailed(md3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(CullingResMaxObjSize + sizeof(UINT), D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
+		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+		nullptr,
+		IID_PPV_ARGS(&m_instance_culling_result_buffer)));
+
+	m_instance_culling_result_buffer->SetName(L"HiZ-Instance-Culling-Result-Buffer");
+
+	//count null的buffer
+	ThrowIfFailed(md3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(sizeof(UINT)),
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&m_counter_reset_buffer)));
+
+	m_counter_reset_buffer->SetName(L"HiZ result reset buffer");
+
+	D3D12_RANGE zero_range = { 0, 0 };
+	UINT8* null_data = nullptr;
+	m_counter_reset_buffer->Map(0, &zero_range, reinterpret_cast<void**> (&null_data));
+	ZeroMemory(&null_data, sizeof(UINT));
+	m_counter_reset_buffer->Unmap(0, nullptr);
+}
+
 UINT  CDeferredRenderPipeline::AlignForUavCounter(UINT bufferSize)
 {
 	const UINT alignment = D3D12_UAV_COUNTER_PLACEMENT_ALIGNMENT;
@@ -1660,7 +1827,7 @@ void CDeferredRenderPipeline::ChunkExpanPass()
 
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_chunk_expan_result_buffer.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST));
 	//重置数据
-	mCommandList->CopyBufferRegion(m_chunk_expan_result_buffer.Get(), ChunkExpanSize, m_counter_reset_buffer.Get(), 0, sizeof(UINT));
+	mCommandList->CopyBufferRegion(m_chunk_expan_result_buffer.Get(), ChunkExpanMaxSize, m_counter_reset_buffer.Get(), 0, sizeof(UINT));
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_chunk_expan_result_buffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
 
 	//绑定描述符
@@ -1745,7 +1912,7 @@ void CDeferredRenderPipeline::CreateChunExpanBuffer()
 {
 	ThrowIfFailed(md3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
 		D3D12_HEAP_FLAG_NONE,
-		&CD3DX12_RESOURCE_DESC::Buffer(ChunkExpanSize + sizeof(UINT), D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
+		&CD3DX12_RESOURCE_DESC::Buffer(ChunkExpanMaxSize + sizeof(UINT), D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
 		D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
 		nullptr,
 		IID_PPV_ARGS(&m_chunk_expan_result_buffer)));
