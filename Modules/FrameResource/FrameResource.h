@@ -7,6 +7,8 @@
 
 struct IndirectCommand
 {
+    D3D12_GPU_VIRTUAL_ADDRESS ObjCbv;
+    D3D12_GPU_VIRTUAL_ADDRESS PassCbv;
     D3D12_DRAW_INDEXED_ARGUMENTS drawArguments;
 };
 

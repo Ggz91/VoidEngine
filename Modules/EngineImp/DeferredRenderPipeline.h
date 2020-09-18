@@ -221,5 +221,9 @@ private:
 		HO_Index,
 	};
 
+
+	//execute indirect
+	void BuildCommandSignature();
+	ComPtr<ID3D12CommandSignature> m_command_signauture;
 };
 

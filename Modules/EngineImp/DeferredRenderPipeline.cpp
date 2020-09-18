@@ -298,6 +298,7 @@ void CDeferredRenderPipeline::BuildRootSignature()
 	BuildHiZInstanceCullingRootSignature();
 	BuildChunkExpanRootSignature();
 	BuildClusterHiZCullingRootSignature();
+	BuildCommandSignature();
 }
 
 
@@ -788,7 +789,7 @@ void CDeferredRenderPipeline::DeferredDrawFillGBufferPass()
 			mRtvDescriptorSize);
 		mCommandList->ClearRenderTargetView(handle, Colors::LightSteelBlue, 0, nullptr);
 	}
-	mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+	//mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 
 	CD3DX12_CPU_DESCRIPTOR_HANDLE g_buffer_handle(mRtvHeap->GetCPUDescriptorHandleForHeapStart(),
 		SwapChainBufferCount,
@@ -800,29 +801,49 @@ void CDeferredRenderPipeline::DeferredDrawFillGBufferPass()
 		&DepthStencilView());
 	mCommandList->OMSetStencilRef(1);
 	auto passCB = mFrameResources->FrameResCB->Resource();
-	UINT pass_offset = m_frame_res_offset.back().PassBeginOffset;
-	mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress() + pass_offset);
-
+	
 	mCommandList->SetPipelineState(mPSOs["DeferredGS"].Get());
 	// Bind all the materials used in this scene.  For structured buffers, we can bypass the heap and 
 	// set as a root descriptor.
 
-	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque], (int) RenderLayer::Opaque);
+	UINT objCBByteSize = sizeof(ObjectConstants);
+	UINT vertexCBByteSize = sizeof(VertexData);
+	UINT indexCBByteSize = sizeof(std::uint16_t);
+
+	auto objectCB = mFrameResources->FrameResCB->Resource();
+	UINT offset = m_frame_res_offset.back().ObjectBeginOffset + GetRenderLayerObjectOffset((int)RenderLayer::Opaque);
+
+	UINT vertex_offset = m_frame_res_offset.back().VertexBeginOffset;
+	UINT index_offset = m_frame_res_offset.back().IndexBeginOffset;
+
+	D3D12_VERTEX_BUFFER_VIEW vbv;
+	vbv.BufferLocation = objectCB->GetGPUVirtualAddress() + vertex_offset;
+	vbv.StrideInBytes = vertexCBByteSize;
+	vbv.SizeInBytes = m_contants_size.VertexCBSize;
+	mCommandList->IASetVertexBuffers(0, 1, &vbv);
+
+	D3D12_INDEX_BUFFER_VIEW ibv;
+	ibv.BufferLocation = objectCB->GetGPUVirtualAddress() + index_offset;
+	ibv.Format = DXGI_FORMAT_R16_UINT;
+	ibv.SizeInBytes = m_contants_size.IndexCBSize;
+	mCommandList->IASetIndexBuffer(&ibv);
+
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_cluster_culling_result_buffer.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT));
+
+	mCommandList->ExecuteIndirect(m_command_signauture.Get(),
+		ChunkExpanBufferMaxElementNum,
+		m_cluster_culling_result_buffer.Get(),
+		0,
+		m_cluster_culling_result_buffer.Get(),
+		ClusterCullingResMaxSize);
+
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_cluster_culling_result_buffer.Get(),  D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
 
 	for (int i = 0; i < GBufferSize(); ++i)
 	{
 		mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer[i].Get(),
 			D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
 	}
-// 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
-// 		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST));
-// 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer[0].Get(),
-// 		D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_COPY_SOURCE));
-// 	mCommandList->CopyResource(CurrentBackBuffer(), m_g_buffer[0].Get());
-// 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
-// 		D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
-// 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_g_buffer[0].Get(),
-// 		D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_GENERIC_READ));
 }
 
 void CDeferredRenderPipeline::DeferredDrawShadingPass()
@@ -866,10 +887,13 @@ void CDeferredRenderPipeline::BuildDeferredGSRootSignature()
 	// Root parameter can be a table, root descriptor or root constants.
 	CD3DX12_ROOT_PARAMETER slotRootParameter[2];
 
+	CD3DX12_DESCRIPTOR_RANGE obj_buffer;
+	obj_buffer.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+
 	// Perfomance TIP: Order from most frequent to least frequent.
 	slotRootParameter[0].InitAsConstantBufferView(0);
 	slotRootParameter[1].InitAsConstantBufferView(1);
-
+	
 	auto staticSamplers = GetStaticSamplers();
 
 	// A root signature is an array of root parameters.
@@ -1120,6 +1144,7 @@ void CDeferredRenderPipeline::CopyObjectCBAndVertexData(const FrameResourceOffse
 	UINT64 object_offset = offset.ObjectBeginOffset;
 	UINT64 vertex_offset = offset.VertexBeginOffset;
 	UINT64 index_offset = offset.IndexBeginOffset;
+	UINT64 pass_offset = offset.PassBeginOffset;
 	UINT start_vertex_index = 0;
 	UINT start_index_index = 0;
 	//LogDebug("Cur Fence : {} , Completed Fence : {}", offset.Fence, mFence->GetCompletedValue());
@@ -1154,6 +1179,8 @@ void CDeferredRenderPipeline::CopyObjectCBAndVertexData(const FrameResourceOffse
 		objConstants.DrawCommand.drawArguments.StartIndexLocation = e->StartIndexLocation;
 		objConstants.DrawCommand.drawArguments.InstanceCount = e->Data.Mesh.Indices.size();
 		objConstants.DrawCommand.drawArguments.BaseVertexLocation = e->BaseVertexLocation;
+		objConstants.DrawCommand.ObjCbv = curr_cb->Resource()->GetGPUVirtualAddress() + object_offset;
+		objConstants.DrawCommand.PassCbv = curr_cb->Resource()->GetGPUVirtualAddress() + pass_offset;
 		if (NULL != e->Mat)
 		{
 			objConstants.MaterialIndex = e->Mat->MatCBIndex;
@@ -1704,6 +1731,24 @@ void CDeferredRenderPipeline::CreateHIZClusterCullingBuffers()
 		IID_PPV_ARGS(&m_cluster_culling_result_buffer)));
 
 	m_cluster_culling_result_buffer->SetName(L"Cluster-Culling-Result-Buffer");
+}
+
+void CDeferredRenderPipeline::BuildCommandSignature()
+{
+	D3D12_INDIRECT_ARGUMENT_DESC argumentDescs[3] = {};
+	argumentDescs[0].Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW;
+	argumentDescs[0].ConstantBufferView.RootParameterIndex = 0;
+	argumentDescs[1].Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW;
+	argumentDescs[1].ConstantBufferView.RootParameterIndex = 1;
+	argumentDescs[2].Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
+
+	D3D12_COMMAND_SIGNATURE_DESC commandSignatureDesc = {};
+	commandSignatureDesc.pArgumentDescs = argumentDescs;
+	commandSignatureDesc.NumArgumentDescs = _countof(argumentDescs);
+	commandSignatureDesc.ByteStride = sizeof(IndirectCommand);
+
+	ThrowIfFailed(md3dDevice->CreateCommandSignature(&commandSignatureDesc, m_deferred_gs_root_signature.Get(), IID_PPV_ARGS(&m_command_signauture)));
+	m_command_signauture->SetName(L"Command-Signature");
 }
 
 void CDeferredRenderPipeline::BuildHiZInstanceCullingRootSignature()
