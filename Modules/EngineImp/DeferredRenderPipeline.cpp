@@ -1624,7 +1624,7 @@ void CDeferredRenderPipeline::BuildClusterHiZCullingRootSignature()
 	CD3DX12_ROOT_PARAMETER slotRootParameter[8];
 	//cluster chunk buffer (consume buffer)
 	CD3DX12_DESCRIPTOR_RANGE cluster_chunk_buffer;
-	cluster_chunk_buffer.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 4);
+	cluster_chunk_buffer.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
 	
 	//object buffer
 	CD3DX12_DESCRIPTOR_RANGE object_buffer;
@@ -1645,7 +1645,7 @@ void CDeferredRenderPipeline::BuildClusterHiZCullingRootSignature()
 	
 	//out put buffer
 	CD3DX12_DESCRIPTOR_RANGE output_buffer;
-	output_buffer.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+	output_buffer.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
 
 	//counter buffer
 
