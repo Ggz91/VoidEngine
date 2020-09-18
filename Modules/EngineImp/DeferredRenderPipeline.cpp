@@ -170,11 +170,15 @@ void CDeferredRenderPipeline::DrawWithDeferredTexturing(const GameTimer& gt)
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 	
 	HiZPass();
-	InstanceHiZCullingPass();
-	ChunkExpanPass();
-	ClusterHiZCullingPass();
-	//DeferredDrawFillGBufferPass();
-	//DeferredDrawShadingPass();
+	if (!GetVisibleRenderItems().empty())
+	{
+		InstanceHiZCullingPass();
+		ChunkExpanPass();
+		ClusterHiZCullingPass();
+		//DeferredDrawFillGBufferPass();
+		//DeferredDrawShadingPass();
+	}
+	
 
 	// Done recording commands.
 	ThrowIfFailed(mCommandList->Close());
