@@ -1598,6 +1598,8 @@ void CDeferredRenderPipeline::ClusterHiZCullingPass()
 	mCommandList->SetComputeRootDescriptorTable(4, h_vertex_index);
 	mCommandList->SetComputeRootDescriptorTable(5, h_vertex_index.Offset(1, mCbvSrvUavDescriptorSize));
 
+	mCommandList->SetComputeRootConstantBufferView(7, m_chunk_expan_result_buffer->GetGPUVirtualAddress() + ChunkExpanMaxSize);
+
 	UINT size = ClusterCullingResMaxSize / BufferThreadSize;
 	size += (ClusterCullingResMaxSize % BufferThreadSize == 0) ? 0 : 1;
 	mCommandList->Dispatch(max(1, size), 1, 1);
@@ -1619,10 +1621,10 @@ void CDeferredRenderPipeline::BuildClusterHiZCullingPSO()
 
 void CDeferredRenderPipeline::BuildClusterHiZCullingRootSignature()
 {
-	CD3DX12_ROOT_PARAMETER slotRootParameter[7];
+	CD3DX12_ROOT_PARAMETER slotRootParameter[8];
 	//cluster chunk buffer (consume buffer)
 	CD3DX12_DESCRIPTOR_RANGE cluster_chunk_buffer;
-	cluster_chunk_buffer.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+	cluster_chunk_buffer.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 4);
 	
 	//object buffer
 	CD3DX12_DESCRIPTOR_RANGE object_buffer;
@@ -1643,7 +1645,9 @@ void CDeferredRenderPipeline::BuildClusterHiZCullingRootSignature()
 	
 	//out put buffer
 	CD3DX12_DESCRIPTOR_RANGE output_buffer;
-	output_buffer.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
+	output_buffer.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+
+	//counter buffer
 
 	slotRootParameter[0].InitAsDescriptorTable(1, &cluster_chunk_buffer);
 	slotRootParameter[1].InitAsDescriptorTable(1, &object_buffer);
@@ -1652,6 +1656,7 @@ void CDeferredRenderPipeline::BuildClusterHiZCullingRootSignature()
 	slotRootParameter[4].InitAsDescriptorTable(1, &vertex_buffer_table);
 	slotRootParameter[5].InitAsDescriptorTable(1, &index_buffer_table);
 	slotRootParameter[6].InitAsDescriptorTable(1, &output_buffer);
+	slotRootParameter[7].InitAsConstantBufferView(1);
 
 	const CD3DX12_STATIC_SAMPLER_DESC sampler_desc(
 		0, // shaderRegister
@@ -1660,7 +1665,7 @@ void CDeferredRenderPipeline::BuildClusterHiZCullingRootSignature()
 		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
 		D3D12_TEXTURE_ADDRESS_MODE_CLAMP); // addressW
 
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(7, slotRootParameter,
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(8, slotRootParameter,
 		1, &sampler_desc,
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
