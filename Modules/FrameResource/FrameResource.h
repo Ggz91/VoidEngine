@@ -5,11 +5,16 @@
 #include "../Common/UploadBuffer.h"
 #include "../Common/GeometryDefines.h"
 
+#pragma pack(1)
+
 struct IndirectCommand
 {
     D3D12_GPU_VIRTUAL_ADDRESS ObjCbv;
+
     D3D12_GPU_VIRTUAL_ADDRESS PassCbv;
+
     D3D12_DRAW_INDEXED_ARGUMENTS drawArguments;
+    UINT padding;
 };
 
 struct InstanceChunk

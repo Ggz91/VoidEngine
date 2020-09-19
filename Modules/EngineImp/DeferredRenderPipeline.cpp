@@ -1188,8 +1188,6 @@ void CDeferredRenderPipeline::CopyObjectCBAndVertexData(const FrameResourceOffse
 			
 		curr_cb->CopyData(object_offset , &objConstants, objCBByteSize );
 		object_offset += objCBByteSize;
-
-		
 				
 	}
 }
