@@ -35,7 +35,7 @@ CDeferredRenderPipeline::~CDeferredRenderPipeline()
 
 bool CDeferredRenderPipeline::Initialize()
 {
-	
+
 	if (!CBaseRenderPipeline::Initialize())
 		return false;
 
@@ -127,7 +127,7 @@ void CDeferredRenderPipeline::OnResize()
 
 void CDeferredRenderPipeline::Update(const GameTimer& gt)
 {
-	
+
 	mLightRotationAngle += 0.1f * gt.DeltaTime();
 
 	XMMATRIX R = XMMatrixRotationY(mLightRotationAngle);
@@ -168,7 +168,7 @@ void CDeferredRenderPipeline::DrawWithDeferredTexturing(const GameTimer& gt)
 
 	ID3D12DescriptorHeap* descriptorHeaps[] = { mSrvDescriptorHeap.Get() };
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
-	
+
 	HiZPass();
 	if (!GetVisibleRenderItems().empty())
 	{
@@ -178,7 +178,7 @@ void CDeferredRenderPipeline::DrawWithDeferredTexturing(const GameTimer& gt)
 		//DeferredDrawFillGBufferPass();
 		//DeferredDrawShadingPass();
 	}
-	
+
 
 	// Done recording commands.
 	ThrowIfFailed(mCommandList->Close());
@@ -234,7 +234,7 @@ DirectX::XMFLOAT3 CDeferredRenderPipeline::GetCameraDir()
 
 void CDeferredRenderPipeline::ClearVisibleRenderItems()
 {
-	for (int i=0; i<(int)RenderLayer::Count; ++i)
+	for (int i = 0; i < (int)RenderLayer::Count; ++i)
 	{
 		mRitemLayer[i].clear();
 	}
@@ -271,7 +271,7 @@ bool CDeferredRenderPipeline::InitDirect3D()
 		return false;
 	}
 
-	
+
 
 	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
 	BuildRootSignature();
@@ -315,7 +315,7 @@ void CDeferredRenderPipeline::BuildDescriptorHeaps()
 	//+1 for vertex buffer / dynamic
 	//+1 for index buffer /dynamic
 	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-	srvHeapDesc.NumDescriptors = mTextures.size() +GBufferSize() + 1 + GetHiZMipmapLevels() + 1 + 1 + 1 + 1 + 1 + 1;
+	srvHeapDesc.NumDescriptors = mTextures.size() + GBufferSize() + 1 + GetHiZMipmapLevels() + 1 + 1 + 1 + 1 + 1 + 1;
 	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
@@ -338,9 +338,9 @@ void CDeferredRenderPipeline::BuildDescriptorHeaps()
 		itr++;
 	}
 
-	
 
-	for (int i=0; i<GBufferSize(); ++i)
+
+	for (int i = 0; i < GBufferSize(); ++i)
 	{
 		D3D12_SHADER_RESOURCE_VIEW_DESC gbuffer_srv_desc = {};
 		gbuffer_srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -350,7 +350,7 @@ void CDeferredRenderPipeline::BuildDescriptorHeaps()
 		gbuffer_srv_desc.Texture2D.MostDetailedMip = 0;
 		gbuffer_srv_desc.Texture2D.PlaneSlice = 0;
 		gbuffer_srv_desc.Texture2D.ResourceMinLODClamp = 0;
-		md3dDevice->CreateShaderResourceView(m_g_buffer[i].Get(), &gbuffer_srv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mTextures.size()+i, mCbvSrvUavDescriptorSize));
+		md3dDevice->CreateShaderResourceView(m_g_buffer[i].Get(), &gbuffer_srv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mTextures.size() + i, mCbvSrvUavDescriptorSize));
 	}
 
 	//+1 for Hi-Z
@@ -369,7 +369,7 @@ void CDeferredRenderPipeline::BuildDescriptorHeaps()
 	hiz_uav.Format = m_hiz_buffer_format;
 	hiz_uav.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
 	hiz_uav.Texture2D.MipSlice = 0;
-	for (int i=0; i<hiz_srv_desc.Texture2D.MipLevels; ++i)
+	for (int i = 0; i < hiz_srv_desc.Texture2D.MipLevels; ++i)
 	{
 		md3dDevice->CreateUnorderedAccessView(m_hiz_buffer.Get(), NULL, &hiz_uav, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mTextures.size() + GBufferSize() + 1 + i, mCbvSrvUavDescriptorSize));
 		hiz_uav.Texture2D.MipSlice++;
@@ -417,12 +417,12 @@ void CDeferredRenderPipeline::BuildShadersAndInputLayout()
 	mShaders["DeferredGSPS"] = d3dUtil::CompileShader(L".\\Shaders\\DeferredGSShader.hlsl", nullptr, "DeferredGSPS", "ps_5_1");
 	mShaders["DeferredShadingVS"] = d3dUtil::CompileShader(L".\\Shaders\\DeferredShadingShader.hlsl", nullptr, "ShadingVS", "vs_5_1");
 	mShaders["DeferredShadingPS"] = d3dUtil::CompileShader(L".\\Shaders\\DeferredShadingShader.hlsl", nullptr, "ShadingPS", "ps_5_1");
-	
+
 	//hi-z generate
 	mShaders["HiZVS"] = d3dUtil::CompileShader(L".\\Shaders\\Depth.hlsl", nullptr, "DepthVS", "vs_5_1");
 	mShaders["HiZPS"] = d3dUtil::CompileShader(L".\\Shaders\\Depth.hlsl", nullptr, "DepthPS", "ps_5_1");
 	mShaders["HiZCS"] = d3dUtil::CompileShader(L".\\Shaders\\HiZMipmap.hlsl", nullptr, "GenerateHiZMipmaps", "cs_5_1");
-	
+
 	const D3D_SHADER_MACRO compute_macros[] =
 	{
 		"BufferThreadSize",  "128",
@@ -431,7 +431,7 @@ void CDeferredRenderPipeline::BuildShadersAndInputLayout()
 
 	//hi-z instance culling
 	mShaders["HiZInstanceCulling"] = d3dUtil::CompileShader(L".\\Shaders\\HiZInstanceCulling.hlsl", compute_macros, "HiZInstanceCulling", "cs_5_1");
-	
+
 
 	//chunk expan
 	mShaders["ChunkExpan"] = d3dUtil::CompileShader(L".\\Shaders\\ChunkExpan.hlsl", compute_macros, "ChunkExpan", "cs_5_1");
@@ -571,9 +571,9 @@ void CDeferredRenderPipeline::DrawRenderItems(ID3D12GraphicsCommandList* cmdList
 void CDeferredRenderPipeline::PushRenderItems(std::vector<RenderItem*>& render_items)
 {
 	RenderItemUtil::FillGeoData(render_items, md3dDevice.Get(), mCommandList.Get());
-	
-// 	auto& opaque_items = mRitemLayer[(int)RenderLayer::Opaque];
-// 	opaque_items.insert(opaque_items.end(), render_items.begin(), render_items.end());
+
+	// 	auto& opaque_items = mRitemLayer[(int)RenderLayer::Opaque];
+	// 	opaque_items.insert(opaque_items.end(), render_items.begin(), render_items.end());
 
 	mAllRitems.insert(mAllRitems.end(), render_items.begin(), render_items.end());
 }
@@ -584,12 +584,12 @@ void CDeferredRenderPipeline::PushMats(std::vector<RenderItem*>& render_items)
 	ThrowIfFailed(mDirectCmdListAlloc->Reset());
 	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
 
-	
+
 
 	//LoadTexture
 	int tex_index = 0;
 	std::unordered_map<std::string, int> tex_indices;
-	for (int i=0; i<render_items.size(); ++i)
+	for (int i = 0; i < render_items.size(); ++i)
 	{
 		//DiffuseMap
 		auto diffuse_tex_itr = tex_indices.find(render_items[i]->Mat->Name + "_diffuse");
@@ -609,7 +609,7 @@ void CDeferredRenderPipeline::PushMats(std::vector<RenderItem*>& render_items)
 			tex_indices[diffuse_map->Name] = render_items[i]->Mat->DiffuseSrvHeapIndex;
 			mTextures[diffuse_map->Name] = std::move(diffuse_map);
 		}
-		
+
 
 		//NormalMap
 		auto normal_tex_itr = tex_indices.find(render_items[i]->Mat->Name + "_normal");
@@ -629,7 +629,7 @@ void CDeferredRenderPipeline::PushMats(std::vector<RenderItem*>& render_items)
 			tex_indices[normal_map->Name] = render_items[i]->Mat->NormalSrvHeapIndex;
 			mTextures[normal_map->Name] = std::move(normal_map);
 		}
-		
+
 
 		mMaterials[render_items[i]->Mat->Name] = std::move(render_items[i]->Mat);
 	}
@@ -743,7 +743,7 @@ void CDeferredRenderPipeline::CreateGBufferRTV()
 	m_g_buffer_format[0] = DXGI_FORMAT_R32G32B32A32_UINT;
 	m_g_buffer_format[1] = DXGI_FORMAT_R32_UINT;
 
-	for (int i=0; i<GBufferSize(); ++i)
+	for (int i = 0; i < GBufferSize(); ++i)
 	{
 		auto clear_values = CD3DX12_CLEAR_VALUE(m_g_buffer_format[i], Colors::LightSteelBlue);
 		ThrowIfFailed(md3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
@@ -760,7 +760,7 @@ void CDeferredRenderPipeline::CreateGBufferRTV()
 		rt_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
 		rt_desc.Texture2D.MipSlice = 0;
 		rt_desc.Texture2D.PlaneSlice = 0;
-		CD3DX12_CPU_DESCRIPTOR_HANDLE h(CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), SwapChainBufferCount+i, mRtvDescriptorSize));
+		CD3DX12_CPU_DESCRIPTOR_HANDLE h(CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), SwapChainBufferCount + i, mRtvDescriptorSize));
 		md3dDevice->CreateRenderTargetView(m_g_buffer[i].Get(), &rt_desc, h);
 	}
 }
@@ -801,7 +801,7 @@ void CDeferredRenderPipeline::DeferredDrawFillGBufferPass()
 		&DepthStencilView());
 	mCommandList->OMSetStencilRef(1);
 	auto passCB = mFrameResources->FrameResCB->Resource();
-	
+
 	mCommandList->SetPipelineState(mPSOs["DeferredGS"].Get());
 	// Bind all the materials used in this scene.  For structured buffers, we can bypass the heap and 
 	// set as a root descriptor.
@@ -828,6 +828,8 @@ void CDeferredRenderPipeline::DeferredDrawFillGBufferPass()
 	ibv.SizeInBytes = m_contants_size.IndexCBSize;
 	mCommandList->IASetIndexBuffer(&ibv);
 
+	mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_cluster_culling_result_buffer.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT));
 
 	mCommandList->ExecuteIndirect(m_command_signauture.Get(),
@@ -837,7 +839,7 @@ void CDeferredRenderPipeline::DeferredDrawFillGBufferPass()
 		m_cluster_culling_result_buffer.Get(),
 		ClusterCullingResMaxSize);
 
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_cluster_culling_result_buffer.Get(),  D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_cluster_culling_result_buffer.Get(), D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
 
 	for (int i = 0; i < GBufferSize(); ++i)
 	{
@@ -849,7 +851,7 @@ void CDeferredRenderPipeline::DeferredDrawFillGBufferPass()
 void CDeferredRenderPipeline::DeferredDrawShadingPass()
 {
 
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
 	mCommandList->SetGraphicsRootSignature(m_deferred_shading_root_signature.Get());
 	mCommandList->SetPipelineState(mPSOs["DeferredShading"].Get());
@@ -860,7 +862,7 @@ void CDeferredRenderPipeline::DeferredDrawShadingPass()
 	mCommandList->SetGraphicsRootDescriptorTable(2, h_des.Offset(1, mCbvSrvUavDescriptorSize));
 	auto matBuffer = mFrameResources->FrameResCB->Resource();
 	mCommandList->SetGraphicsRootShaderResourceView(3, matBuffer->GetGPUVirtualAddress() + m_frame_res_offset.back().MatBeginOffset);
-	
+
 	if (0 != mTextures.size())
 	{
 		mCommandList->SetGraphicsRootDescriptorTable(4, mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
@@ -872,7 +874,7 @@ void CDeferredRenderPipeline::DeferredDrawShadingPass()
 	mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	mCommandList->DrawInstanced(6, 1, 0, 0);
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PRESENT));
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
 }
 
@@ -893,7 +895,7 @@ void CDeferredRenderPipeline::BuildDeferredGSRootSignature()
 	// Perfomance TIP: Order from most frequent to least frequent.
 	slotRootParameter[0].InitAsConstantBufferView(0);
 	slotRootParameter[1].InitAsConstantBufferView(1);
-	
+
 	auto staticSamplers = GetStaticSamplers();
 
 	// A root signature is an array of root parameters.
@@ -973,13 +975,16 @@ void CDeferredRenderPipeline::UpdateFrameResource(const GameTimer& gt)
 	//填充数据到frame res offset queue中
 	m_contants_size = CalCurFrameContantsSize();
 	FrameResourceOffset  offset;
-	
+
 	//初始值
 	offset.ObjectBeginOffset = m_frame_res_offset.empty() ? 0 : Align(m_frame_res_offset.back().EndResOffset, sizeof(ObjectConstants));
 	offset.MatBeginOffset = offset.ObjectBeginOffset + m_contants_size.ObjectCBSize;
 	offset.PassBeginOffset = AlignForCrvAddress(mFrameResources->FrameResCB->Resource()->GetGPUVirtualAddress(), offset.MatBeginOffset + m_contants_size.MatCBSize);
-	offset.VertexBeginOffset = offset.PassBeginOffset + m_contants_size.PassCBSize;
-	offset.IndexBeginOffset = offset.VertexBeginOffset + m_contants_size.VertexCBSize;
+	offset.VertexBeginOffset = Align(offset.PassBeginOffset + m_contants_size.PassCBSize, sizeof(VertexData));
+	offset.IndexBeginOffset = Align(offset.VertexBeginOffset + m_contants_size.VertexCBSize, sizeof(std::uint16_t));
+
+	//LogDebug(" Offset : Obj - {} Mat - {} Pass - {} Vertex - {} Index - {} ", offset.ObjectBeginOffset, offset.MatBeginOffset, offset.PassBeginOffset, offset.VertexBeginOffset, offset.IndexBeginOffset);
+
 
 	if (!CanFillFrameRes(m_contants_size, offset) || (m_frame_res_offset.size() >= MaxCommandAllocNum))
 	{
@@ -1004,7 +1009,7 @@ void CDeferredRenderPipeline::UpdateFrameResource(const GameTimer& gt)
 	}
 	//LogDebug(" [Fill Frame Resource] size {} ", m_frame_res_offset.size());
 	//压入队列
-	
+
 	offset.Fence = mCurrentFence;
 
 	//copy data
@@ -1014,7 +1019,7 @@ void CDeferredRenderPipeline::UpdateFrameResource(const GameTimer& gt)
 	offset.EndResOffset %= mFrameResources->Size();
 	m_frame_res_offset.push(offset);
 
-	
+
 }
 
 bool CDeferredRenderPipeline::CanFillFrameRes(FrameResComponentSize& size, FrameResourceOffset& offset)
@@ -1028,10 +1033,10 @@ bool CDeferredRenderPipeline::CanFillFrameRes(FrameResComponentSize& size, Frame
 	{
 		return true;
 	}
-	
+
 	//现在object buffer也要是连续的, vertex buffer和index buffer必须是连续的,因为frame buffer实际上是一个松散的结构
 	UINT tail_index = offset.ObjectBeginOffset + size.ObjectCBSize;
-	if ( tail_index <= mFrameResources->Size())
+	if (tail_index <= mFrameResources->Size())
 	{
 		//在Object区后还有位置
 		offset.MatBeginOffset = tail_index;
@@ -1043,12 +1048,13 @@ bool CDeferredRenderPipeline::CanFillFrameRes(FrameResComponentSize& size, Frame
 			tail_index += size.PassCBSize;
 			if (tail_index <= mFrameResources->Size())
 			{
-				offset.VertexBeginOffset = tail_index;
+
+				offset.VertexBeginOffset = Align(tail_index, sizeof(VertexData));
 				tail_index += size.VertexCBSize;
 				//Pass区后还有位置
 				if (tail_index <= mFrameResources->Size())
 				{
-					offset.IndexBeginOffset = tail_index;
+					offset.IndexBeginOffset = Align(tail_index, sizeof(std::uint16_t));
 					tail_index += size.IndexCBSize;
 					//Vertex之后还有位置
 					if (tail_index <= mFrameResources->Size())
@@ -1065,7 +1071,7 @@ bool CDeferredRenderPipeline::CanFillFrameRes(FrameResComponentSize& size, Frame
 				else
 				{
 					offset.VertexBeginOffset = 0;
-					offset.IndexBeginOffset = offset.VertexBeginOffset + size.VertexCBSize;
+					offset.IndexBeginOffset = Align(offset.VertexBeginOffset + size.VertexCBSize, sizeof(std::uint16_t));
 					if (offset.VertexBeginOffset + size.VertexCBSize + size.IndexCBSize < m_frame_res_offset.front().ObjectBeginOffset)
 					{
 						return true;
@@ -1081,8 +1087,8 @@ bool CDeferredRenderPipeline::CanFillFrameRes(FrameResComponentSize& size, Frame
 				{
 					return false;
 				}
-				offset.VertexBeginOffset = offset.PassBeginOffset + size.PassCBSize;
-				offset.IndexBeginOffset = offset.VertexBeginOffset + size.VertexCBSize; 
+				offset.VertexBeginOffset = Align(offset.PassBeginOffset + size.PassCBSize, sizeof(VertexData));
+				offset.IndexBeginOffset = Align(offset.VertexBeginOffset + size.VertexCBSize, sizeof(std::uint16_t));
 				return true;
 			}
 		}
@@ -1094,8 +1100,8 @@ bool CDeferredRenderPipeline::CanFillFrameRes(FrameResComponentSize& size, Frame
 			{
 				return false;
 			}
-			offset.VertexBeginOffset = offset.PassBeginOffset + size.PassCBSize;
-			offset.IndexBeginOffset = offset.VertexBeginOffset + size.VertexCBSize;
+			offset.VertexBeginOffset = Align(offset.PassBeginOffset + size.PassCBSize, sizeof(VertexData));
+			offset.IndexBeginOffset = Align(offset.VertexBeginOffset + size.VertexCBSize, sizeof(std::uint16_t));
 			return true;
 		}
 	}
@@ -1103,14 +1109,14 @@ bool CDeferredRenderPipeline::CanFillFrameRes(FrameResComponentSize& size, Frame
 	{
 		//object buffer也要是连续的
 		offset.ObjectBeginOffset = 0;
-		offset.MatBeginOffset = offset.ObjectBeginOffset + size.MatCBSize;
-		offset.PassBeginOffset = AlignForCrvAddress(mFrameResources->FrameResCB->Resource()->GetGPUVirtualAddress(), m_frame_res_offset.back().EndResOffset + size.ObjectCBSize + size.MatCBSize);
+		offset.MatBeginOffset = offset.ObjectBeginOffset + size.ObjectCBSize;
+		offset.PassBeginOffset = AlignForCrvAddress(mFrameResources->FrameResCB->Resource()->GetGPUVirtualAddress(), offset.MatBeginOffset + size.MatCBSize);
 		if (offset.PassBeginOffset + size.PassCBSize + size.VertexCBSize + size.IndexCBSize >= m_frame_res_offset.front().ObjectBeginOffset)
 		{
 			return false;
 		}
-		offset.VertexBeginOffset = offset.PassBeginOffset + size.PassCBSize;
-		offset.IndexBeginOffset = offset.VertexBeginOffset + size.VertexCBSize; 
+		offset.VertexBeginOffset = Align(offset.PassBeginOffset + size.PassCBSize, sizeof(VertexData));
+		offset.IndexBeginOffset = Align(offset.VertexBeginOffset + size.VertexCBSize, sizeof(std::uint16_t));
 		return true;
 	}
 
@@ -1177,25 +1183,25 @@ void CDeferredRenderPipeline::CopyObjectCBAndVertexData(const FrameResourceOffse
 		objConstants.DrawCommand.drawArguments.InstanceCount = 1;
 		objConstants.DrawCommand.drawArguments.StartInstanceLocation = 0;
 		objConstants.DrawCommand.drawArguments.StartIndexLocation = e->StartIndexLocation;
-		objConstants.DrawCommand.drawArguments.InstanceCount = e->Data.Mesh.Indices.size();
 		objConstants.DrawCommand.drawArguments.BaseVertexLocation = e->BaseVertexLocation;
+		objConstants.DrawCommand.drawArguments.IndexCountPerInstance = e->Data.Mesh.Indices.size();
 		objConstants.DrawCommand.ObjCbv = curr_cb->Resource()->GetGPUVirtualAddress() + object_offset;
 		objConstants.DrawCommand.PassCbv = curr_cb->Resource()->GetGPUVirtualAddress() + pass_offset;
 		if (NULL != e->Mat)
 		{
 			objConstants.MaterialIndex = e->Mat->MatCBIndex;
 		}
-			
-		curr_cb->CopyData(object_offset , &objConstants, objCBByteSize );
+
+		curr_cb->CopyData(object_offset, &objConstants, objCBByteSize);
 		object_offset += objCBByteSize;
-				
+
 	}
 }
 
 void CDeferredRenderPipeline::CopyMatCBData(const FrameResourceOffset& offset)
 {
 	UINT matCBByteSize = sizeof(MatData);
-	auto currMaterialBuffer = mFrameResources->FrameResCB.get() ;
+	auto currMaterialBuffer = mFrameResources->FrameResCB.get();
 	for (auto& e : mMaterials)
 	{
 		Material* mat = e.second;
@@ -1210,8 +1216,8 @@ void CDeferredRenderPipeline::CopyMatCBData(const FrameResourceOffset& offset)
 			XMStoreFloat4x4(&matData.MatTransform, XMMatrixTranspose(matTransform));
 			matData.DiffuseMapIndex = mat->DiffuseSrvHeapIndex;
 			matData.NormalMapIndex = mat->NormalSrvHeapIndex;
-			
-			
+
+
 			currMaterialBuffer->CopyData(mat->MatCBIndex * sizeof(MatData) + offset.MatBeginOffset, &matData, sizeof(MatData));
 
 			mat->NumFramesDirty--;
@@ -1264,18 +1270,18 @@ void CDeferredRenderPipeline::CopyPassCBData(const GameTimer& gt, const FrameRes
 	mMainPassCB.ObjectNum = GetVisibleRenderItems().size();
 
 	auto currPassCB = mFrameResources->FrameResCB.get();
-	currPassCB->CopyData(offset.PassBeginOffset , &mMainPassCB, sizeof(PassConstants));
+	currPassCB->CopyData(offset.PassBeginOffset, &mMainPassCB, sizeof(PassConstants));
 }
 
 FrameResComponentSize CDeferredRenderPipeline::CalCurFrameContantsSize()
 {
 	FrameResComponentSize res;
-	res.ObjectCBSize= mAllRitems.size() * sizeof(ObjectConstants);
+	res.ObjectCBSize = ScenePredefine::MaxObjectNumPerScene * sizeof(ObjectConstants);
 	res.PassCBSize = sizeof(PassConstants);
 	res.VertexCBSize = 0;
 	res.IndexCBSize = 0;
 	res.MatCBSize = mMaterials.size() * sizeof(MatData);
-	for (int i=0; i<mAllRitems.size(); ++i)
+	for (int i = 0; i < mAllRitems.size(); ++i)
 	{
 		res.VertexCBSize += mAllRitems[i]->Data.Mesh.Vertices.size() * sizeof(VertexData);
 		res.IndexCBSize += mAllRitems[i]->Data.Mesh.Indices.size() * sizeof(std::uint16_t);
@@ -1286,11 +1292,6 @@ FrameResComponentSize CDeferredRenderPipeline::CalCurFrameContantsSize()
 
 void CDeferredRenderPipeline::HiZPass()
 {
-	if (mRitemLayer[(int)RenderLayer::Occluder].empty())
-	{
-		return;
-	}
-
 	//1、生成全屏的depth
 	GenerateFullResDepthPass();
 	//2、通过depth downsample采样得到hi-Z
@@ -1317,7 +1318,7 @@ void CDeferredRenderPipeline::CreateHiZBuffer()
 	CD3DX12_CPU_DESCRIPTOR_HANDLE h(CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), SwapChainBufferCount + GBufferSize(), mRtvDescriptorSize));
 	md3dDevice->CreateRenderTargetView(m_hiz_buffer.Get(), &rt_desc, h);
 
-	
+
 
 }
 
@@ -1337,7 +1338,7 @@ void CDeferredRenderPipeline::GenerateFullResDepthPass()
 
 	mCommandList->SetPipelineState(mPSOs["HiZFullRes"].Get());
 
- 	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Occluder], (int)RenderLayer::Occluder);
+	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Occluder], (int)RenderLayer::Occluder);
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_hiz_buffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
 
 }
@@ -1346,7 +1347,7 @@ void CDeferredRenderPipeline::GenerateHiZBufferChainPass()
 {
 	mCommandList->SetPipelineState(mPSOs["HiZChainBuffer"].Get());
 	mCommandList->SetComputeRootSignature(m_hiz_buffer_chain_pass_root_signature.Get());
-	
+
 	CD3DX12_GPU_DESCRIPTOR_HANDLE h_full_res(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 	CD3DX12_GPU_DESCRIPTOR_HANDLE h_mipmap(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 	h_full_res.Offset(mTextures.size() + GBufferSize(), mCbvSrvUavDescriptorSize);
@@ -1367,20 +1368,20 @@ void CDeferredRenderPipeline::GenerateHiZBufferChainPass()
 		};
 	};
 
-	for (int i=0; i<GetHiZMipmapLevels() - 1; ++i)
+	for (int i = 0; i < GetHiZMipmapLevels() - 1; ++i)
 	{
 		mCommandList->SetComputeRootDescriptorTable(0, h_full_res);
 		h_mipmap.Offset(1, mCbvSrvUavDescriptorSize);
 		mCommandList->SetComputeRootDescriptorTable(1, h_mipmap);
 
-		UINT width = mClientWidth >> (i+1);
-		UINT height = mClientHeight >> (i+1);
+		UINT width = mClientWidth >> (i + 1);
+		UINT height = mClientHeight >> (i + 1);
 
 		mCommandList->SetComputeRoot32BitConstant(2, TexelParam(1.0f / width).Uint, 0);
 		mCommandList->SetComputeRoot32BitConstant(2, TexelParam(1.0f / height).Uint, 1);
 		mCommandList->SetComputeRoot32BitConstant(2, i, 2);
 
-		mCommandList->Dispatch(mClientWidth/8, mClientHeight/8, 1);
+		mCommandList->Dispatch(mClientWidth / 8, mClientHeight / 8, 1);
 	}
 }
 
@@ -1443,7 +1444,7 @@ void CDeferredRenderPipeline::BuildHiZBufferChainPassRootSignature()
 	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(3, slotRootParameter,
 		1, &sampler_desc,
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
-	
+
 	// create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
 	ComPtr<ID3DBlob> serializedRootSig = nullptr;
 	ComPtr<ID3DBlob> errorBlob = nullptr;
@@ -1528,7 +1529,7 @@ UINT CDeferredRenderPipeline::GetHiZMipmapLevels() const
 
 void CDeferredRenderPipeline::InstanceHiZCullingPass()
 {
-	
+
 	//根据instance的包围盒结合HiZ进行剔除
 	mCommandList->SetPipelineState(mPSOs["HiZInstanceCulling"].Get());
 	mCommandList->SetComputeRootSignature(m_hiz_instance_culling_pass_root_signature.Get());
@@ -1562,8 +1563,8 @@ void CDeferredRenderPipeline::InstanceHiZCullingPass()
 	obj_srv_desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 	obj_srv_desc.Buffer.NumElements = ScenePredefine::MaxObjectNumPerScene;
 	obj_srv_desc.Buffer.StructureByteStride = sizeof(ObjectConstants);
+	//LogDebug("Buffer offset : {}, Add Size : {}, Frame Res total size : {}", cur_offset.ObjectBeginOffset, ScenePredefine::MaxObjectNumPerScene * sizeof(ObjectConstants), mFrameResources->Size());
 	md3dDevice->CreateShaderResourceView(mFrameResources->FrameResCB->Resource(), &obj_srv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), m_descriptor_end + HO_Object, mCbvSrvUavDescriptorSize));
-
 	mCommandList->SetComputeRootConstantBufferView(0, cur_cb->GetGPUVirtualAddress() + cur_offset.PassBeginOffset);
 	mCommandList->SetComputeRootDescriptorTable(2, m_obj_handle);
 	UINT size = GetVisibleRenderItems().size() / BufferThreadSize;
@@ -1594,13 +1595,13 @@ void CDeferredRenderPipeline::ClusterHiZCullingPass()
 
 	auto cur_cb = mFrameResources->FrameResCB->Resource();
 	auto cur_offset = m_frame_res_offset.back();
-	
+
 	CD3DX12_GPU_DESCRIPTOR_HANDLE h_hiz(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-	h_hiz.Offset(mTextures.size() + GBufferSize()+1, mCbvSrvUavDescriptorSize);
+	h_hiz.Offset(mTextures.size() + GBufferSize() + 1, mCbvSrvUavDescriptorSize);
 	mCommandList->SetComputeRootDescriptorTable(1, m_obj_handle);
 	mCommandList->SetComputeRootDescriptorTable(2, h_hiz);
 	mCommandList->SetComputeRootConstantBufferView(3, cur_cb->GetGPUVirtualAddress() + cur_offset.PassBeginOffset);
-	
+
 	//动态绑定vertex buffer 和index buffer
 	D3D12_SHADER_RESOURCE_VIEW_DESC vertex_srv_desc = {};
 	vertex_srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -1654,7 +1655,7 @@ void CDeferredRenderPipeline::BuildClusterHiZCullingRootSignature()
 	//cluster chunk buffer (consume buffer)
 	CD3DX12_DESCRIPTOR_RANGE cluster_chunk_buffer;
 	cluster_chunk_buffer.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
-	
+
 	//object buffer
 	CD3DX12_DESCRIPTOR_RANGE object_buffer;
 	object_buffer.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
@@ -1671,7 +1672,7 @@ void CDeferredRenderPipeline::BuildClusterHiZCullingRootSignature()
 	//index buffer
 	CD3DX12_DESCRIPTOR_RANGE index_buffer_table;
 	index_buffer_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 3);
-	
+
 	//out put buffer
 	CD3DX12_DESCRIPTOR_RANGE output_buffer;
 	output_buffer.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
@@ -1753,12 +1754,12 @@ void CDeferredRenderPipeline::BuildHiZInstanceCullingRootSignature()
 {
 	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
 	CD3DX12_DESCRIPTOR_RANGE hiz_buffer_table;
-	hiz_buffer_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0); 
+	hiz_buffer_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0);
 	CD3DX12_DESCRIPTOR_RANGE obj_buffer_table;
 	obj_buffer_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1, 0);
 	CD3DX12_DESCRIPTOR_RANGE output_buffer_table;
 	output_buffer_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 0);
-	
+
 	//pass buffer
 	slotRootParameter[0].InitAsConstantBufferView(0);
 
@@ -1811,7 +1812,7 @@ void CDeferredRenderPipeline::BuildHiZInstanceCullingPSO()
 	};
 	ThrowIfFailed(md3dDevice->CreateComputePipelineState(&hiz_instance_culling_pso_desc, IID_PPV_ARGS(&mPSOs["HiZInstanceCulling"])));
 
-	
+
 }
 
 void CDeferredRenderPipeline::CreateHiZInstanceCullingBuffers()
@@ -1862,7 +1863,7 @@ UINT CDeferredRenderPipeline::Align(const UINT& size, const UINT& alignment)
 {
 	UINT count = size / alignment;
 	count += (size % alignment == 0) ? 0 : 1;
-	
+
 	return count * alignment;
 }
 
@@ -1908,7 +1909,7 @@ void CDeferredRenderPipeline::ChunkExpanPass()
 void CDeferredRenderPipeline::BuildChunkExpanRootSignature()
 {
 	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
-	
+
 	CD3DX12_DESCRIPTOR_RANGE instance_culling_res_buffer_table;
 	instance_culling_res_buffer_table.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0);
 	CD3DX12_DESCRIPTOR_RANGE obj_buffer_table;
@@ -1972,4 +1973,3 @@ void CDeferredRenderPipeline::CreateChunExpanBuffer()
 
 	m_chunk_expan_result_buffer->SetName(L"Chunk-Expan-Result-Buffer");
 }
-
