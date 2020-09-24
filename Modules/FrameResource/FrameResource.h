@@ -5,14 +5,21 @@
 #include "../Common/UploadBuffer.h"
 #include "../Common/GeometryDefines.h"
 
-//#pragma pack(1)
 
-struct IndirectCommand
+struct IndirectCommandEx
 {
 	D3D12_GPU_VIRTUAL_ADDRESS ObjCbv;
 	D3D12_GPU_VIRTUAL_ADDRESS PassCbv;
 	D3D12_DRAW_INDEXED_ARGUMENTS drawArguments;
-	float padding[3];
+	UINT padding;
+};
+
+struct IndirectCommand
+{
+ 	D3D12_GPU_VIRTUAL_ADDRESS ObjCbv;
+ 	D3D12_GPU_VIRTUAL_ADDRESS PassCbv;
+	D3D12_DRAW_INDEXED_ARGUMENTS drawArguments;
+	UINT padding[3];
 };
 
 struct InstanceChunk
@@ -30,11 +37,11 @@ struct ClusterChunk
 struct ObjectConstants
 {
 	IndirectCommand DrawCommand;
-	float padding0[9];
+	UINT pad0[8];
 	DirectX::XMFLOAT4X4 World = MathHelper::Identity4x4();
 	DirectX::XMFLOAT4X4 TexTransform = MathHelper::Identity4x4();
 	AABB    Bounds;
-	float padding1[6];
+	UINT pad1[8];
 	UINT    MaterialIndex;
 };
 
@@ -138,3 +145,4 @@ public:
 private:
 	UINT64 m_total_size;
 };
+

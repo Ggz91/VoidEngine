@@ -207,7 +207,7 @@ private:
 	ComPtr<ID3D12Resource> m_cluster_culling_result_buffer;
 	ComPtr<ID3D12RootSignature> m_hiz_cluster_culling_pass_root_signature = nullptr;
 	
-	const UINT ClusterCullingResMaxSize = AlignForUavCounter(sizeof(IndirectCommand) * ChunkExpanBufferMaxElementNum);
+	const UINT ClusterCullingResMaxSize = AlignForUavCounter(sizeof(IndirectCommandEx) * ChunkExpanBufferMaxElementNum);
 
 
 	//¶¯Ì¬´´½¨view

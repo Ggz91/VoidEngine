@@ -105,6 +105,12 @@
       <Command>xcopy /y /d ".\VoidEngineInterface.h" "$(OutDir)..\Interface\"
 xcopy /y /d ".\Modules\Common" "$(OutDir)..\Modules\Common"</Command>
     </PostBuildEvent>
+    <FxCompile>
+      <EntryPointName />
+    </FxCompile>
+    <FxCompile>
+      <ShaderModel>5.1</ShaderModel>
+    </FxCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>

@@ -175,8 +175,8 @@ void CDeferredRenderPipeline::DrawWithDeferredTexturing(const GameTimer& gt)
 		InstanceHiZCullingPass();
 		ChunkExpanPass();
 		ClusterHiZCullingPass();
-		//DeferredDrawFillGBufferPass();
-		//DeferredDrawShadingPass();
+ 		DeferredDrawFillGBufferPass();
+ 		DeferredDrawShadingPass();
 	}
 
 
@@ -403,7 +403,7 @@ void CDeferredRenderPipeline::BuildDescriptorHeaps()
 	cluster_culling_uav.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
 	cluster_culling_uav.Buffer.CounterOffsetInBytes = ClusterCullingResMaxSize;
 	cluster_culling_uav.Buffer.FirstElement = 0;
-	cluster_culling_uav.Buffer.StructureByteStride = sizeof(IndirectCommand);
+	cluster_culling_uav.Buffer.StructureByteStride = sizeof(IndirectCommandEx);
 	cluster_culling_uav.Buffer.NumElements = ChunkExpanBufferMaxElementNum;
 	cluster_culling_uav.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
 	md3dDevice->CreateUnorderedAccessView(m_cluster_culling_result_buffer.Get(), m_cluster_culling_result_buffer.Get(), &cluster_culling_uav, CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mTextures.size() + GBufferSize() + 1 + hiz_srv_desc.Texture2D.MipLevels + 1 + 1, mCbvSrvUavDescriptorSize));
@@ -811,7 +811,6 @@ void CDeferredRenderPipeline::DeferredDrawFillGBufferPass()
 	UINT indexCBByteSize = sizeof(std::uint16_t);
 
 	auto objectCB = mFrameResources->FrameResCB->Resource();
-	UINT offset = m_frame_res_offset.back().ObjectBeginOffset + GetRenderLayerObjectOffset((int)RenderLayer::Opaque);
 
 	UINT vertex_offset = m_frame_res_offset.back().VertexBeginOffset;
 	UINT index_offset = m_frame_res_offset.back().IndexBeginOffset;
@@ -896,6 +895,7 @@ void CDeferredRenderPipeline::BuildDeferredGSRootSignature()
 	slotRootParameter[0].InitAsConstantBufferView(0);
 	slotRootParameter[1].InitAsConstantBufferView(1);
 
+
 	auto staticSamplers = GetStaticSamplers();
 
 	// A root signature is an array of root parameters.
@@ -974,15 +974,23 @@ void CDeferredRenderPipeline::UpdateFrameResource(const GameTimer& gt)
 {
 	//填充数据到frame res offset queue中
 	m_contants_size = CalCurFrameContantsSize();
+	
 	FrameResourceOffset  offset;
+	if (!m_frame_res_offset.empty())
+	{
+		offset = m_frame_res_offset.back();
+	}
+	else
+	{
+		//初始值
+		offset.ObjectBeginOffset = m_frame_res_offset.empty() ? 0 : Align(m_frame_res_offset.back().EndResOffset, sizeof(ObjectConstants));
+		offset.MatBeginOffset = offset.ObjectBeginOffset + m_contants_size.ObjectCBSize;
+		offset.PassBeginOffset = AlignForCrvAddress(mFrameResources->FrameResCB->Resource()->GetGPUVirtualAddress(), offset.MatBeginOffset + m_contants_size.MatCBSize);
+		offset.VertexBeginOffset = Align(offset.PassBeginOffset + m_contants_size.PassCBSize, sizeof(VertexData));
+		offset.IndexBeginOffset = Align(offset.VertexBeginOffset + m_contants_size.VertexCBSize, sizeof(std::uint16_t));
 
-	//初始值
-	offset.ObjectBeginOffset = m_frame_res_offset.empty() ? 0 : Align(m_frame_res_offset.back().EndResOffset, sizeof(ObjectConstants));
-	offset.MatBeginOffset = offset.ObjectBeginOffset + m_contants_size.ObjectCBSize;
-	offset.PassBeginOffset = AlignForCrvAddress(mFrameResources->FrameResCB->Resource()->GetGPUVirtualAddress(), offset.MatBeginOffset + m_contants_size.MatCBSize);
-	offset.VertexBeginOffset = Align(offset.PassBeginOffset + m_contants_size.PassCBSize, sizeof(VertexData));
-	offset.IndexBeginOffset = Align(offset.VertexBeginOffset + m_contants_size.VertexCBSize, sizeof(std::uint16_t));
-
+	}
+	
 	//LogDebug(" Offset : Obj - {} Mat - {} Pass - {} Vertex - {} Index - {} ", offset.ObjectBeginOffset, offset.MatBeginOffset, offset.PassBeginOffset, offset.VertexBeginOffset, offset.IndexBeginOffset);
 
 
@@ -1133,9 +1141,15 @@ void CDeferredRenderPipeline::FreeMemToCompletedFrame(UINT64 frame_index)
 
 void CDeferredRenderPipeline::CopyFrameRescourceData(const GameTimer& gt, const FrameResourceOffset& offset)
 {
+	static bool dirty = false;
+	if (dirty)
+	{
+		return;
+	}
+	CopyPassCBData(gt, offset);
 	CopyObjectCBAndVertexData(offset);
 	CopyMatCBData(offset);
-	CopyPassCBData(gt, offset);
+	dirty = true;
 }
 
 void CDeferredRenderPipeline::CopyObjectCBAndVertexData(const FrameResourceOffset& offset)
@@ -1179,14 +1193,13 @@ void CDeferredRenderPipeline::CopyObjectCBAndVertexData(const FrameResourceOffse
 		objConstants.Bounds.MinVertex = e->Bounds.MinVertex;
 		XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
 		XMStoreFloat4x4(&objConstants.TexTransform, XMMatrixTranspose(texTransform));
-		D3D12_GPU_VIRTUAL_ADDRESS address = curr_cb->Resource()->GetGPUVirtualAddress() + vertex_offset;
 		objConstants.DrawCommand.drawArguments.InstanceCount = 1;
 		objConstants.DrawCommand.drawArguments.StartInstanceLocation = 0;
 		objConstants.DrawCommand.drawArguments.StartIndexLocation = e->StartIndexLocation;
 		objConstants.DrawCommand.drawArguments.BaseVertexLocation = e->BaseVertexLocation;
 		objConstants.DrawCommand.drawArguments.IndexCountPerInstance = e->Data.Mesh.Indices.size();
-		objConstants.DrawCommand.ObjCbv = curr_cb->Resource()->GetGPUVirtualAddress() + object_offset;
-		objConstants.DrawCommand.PassCbv = curr_cb->Resource()->GetGPUVirtualAddress() + pass_offset;
+ 		objConstants.DrawCommand.ObjCbv = curr_cb->Resource()->GetGPUVirtualAddress() + object_offset;
+ 		objConstants.DrawCommand.PassCbv = curr_cb->Resource()->GetGPUVirtualAddress() + pass_offset;
 		if (NULL != e->Mat)
 		{
 			objConstants.MaterialIndex = e->Mat->MatCBIndex;
@@ -1739,12 +1752,12 @@ void CDeferredRenderPipeline::BuildCommandSignature()
 	argumentDescs[0].ConstantBufferView.RootParameterIndex = 0;
 	argumentDescs[1].Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW;
 	argumentDescs[1].ConstantBufferView.RootParameterIndex = 1;
-	argumentDescs[2].Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
+	argumentDescs[2].Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED;
 
 	D3D12_COMMAND_SIGNATURE_DESC commandSignatureDesc = {};
 	commandSignatureDesc.pArgumentDescs = argumentDescs;
 	commandSignatureDesc.NumArgumentDescs = _countof(argumentDescs);
-	commandSignatureDesc.ByteStride = sizeof(IndirectCommand);
+	commandSignatureDesc.ByteStride = sizeof(IndirectCommandEx);
 
 	ThrowIfFailed(md3dDevice->CreateCommandSignature(&commandSignatureDesc, m_deferred_gs_root_signature.Get(), IID_PPV_ARGS(&m_command_signauture)));
 	m_command_signauture->SetName(L"Command-Signature");
