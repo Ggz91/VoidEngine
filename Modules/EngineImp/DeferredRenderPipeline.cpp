@@ -423,18 +423,13 @@ void CDeferredRenderPipeline::BuildShadersAndInputLayout()
 	mShaders["HiZPS"] = d3dUtil::CompileShader(L".\\Shaders\\Depth.hlsl", nullptr, "DepthPS", "ps_5_1");
 	mShaders["HiZCS"] = d3dUtil::CompileShader(L".\\Shaders\\HiZMipmap.hlsl", nullptr, "GenerateHiZMipmaps", "cs_5_1");
 
-	const D3D_SHADER_MACRO compute_macros[] =
-	{
-		"BufferThreadSize",  "128",
-		NULL, NULL
-	};
 
 	//hi-z instance culling
-	mShaders["HiZInstanceCulling"] = d3dUtil::CompileShader(L".\\Shaders\\HiZInstanceCulling.hlsl", compute_macros, "HiZInstanceCulling", "cs_5_1");
+	mShaders["HiZInstanceCulling"] = d3dUtil::CompileShader(L".\\Shaders\\HiZInstanceCulling.hlsl", nullptr, "HiZInstanceCulling", "cs_5_1");
 
 
 	//chunk expan
-	mShaders["ChunkExpan"] = d3dUtil::CompileShader(L".\\Shaders\\ChunkExpan.hlsl", compute_macros, "ChunkExpan", "cs_5_1");
+	mShaders["ChunkExpan"] = d3dUtil::CompileShader(L".\\Shaders\\ChunkExpan.hlsl", nullptr, "ChunkExpan", "cs_5_1");
 
 	//cluster culling
 	mShaders["HiZClusterCulling"] = d3dUtil::CompileShader(L".\\Shaders\\HiZClusterCulling.hlsl", nullptr, "HiZClusterCulling", "cs_5_1");
@@ -974,26 +969,15 @@ void CDeferredRenderPipeline::UpdateFrameResource(const GameTimer& gt)
 {
 	//填充数据到frame res offset queue中
 	m_contants_size = CalCurFrameContantsSize();
-	
+
 	FrameResourceOffset  offset;
-	if (!m_frame_res_offset.empty())
-	{
-		offset = m_frame_res_offset.back();
-	}
-	else
-	{
-		//初始值
-		offset.ObjectBeginOffset = m_frame_res_offset.empty() ? 0 : Align(m_frame_res_offset.back().EndResOffset, sizeof(ObjectConstants));
-		offset.MatBeginOffset = Align(offset.ObjectBeginOffset + m_contants_size.ObjectCBSize, sizeof(MatData));
-		offset.PassBeginOffset = AlignForCrvAddress(mFrameResources->FrameResCB->Resource()->GetGPUVirtualAddress(), offset.MatBeginOffset + m_contants_size.MatCBSize);
-		offset.VertexBeginOffset = Align(offset.PassBeginOffset + m_contants_size.PassCBSize, sizeof(VertexData));
-		offset.IndexBeginOffset = Align(offset.VertexBeginOffset + m_contants_size.VertexCBSize, sizeof(std::uint16_t));
-
-	}
+	//初始值
+	offset.ObjectBeginOffset = m_frame_res_offset.empty() ? 0 : AlignForCrvAddress(mFrameResources->FrameResCB->Resource()->GetGPUVirtualAddress(), m_frame_res_offset.back().EndResOffset);
+	offset.MatBeginOffset = Align(offset.ObjectBeginOffset + m_contants_size.ObjectCBSize, sizeof(MatData));
+	offset.PassBeginOffset = AlignForCrvAddress(mFrameResources->FrameResCB->Resource()->GetGPUVirtualAddress(), offset.MatBeginOffset + m_contants_size.MatCBSize);
+	offset.VertexBeginOffset = Align(offset.PassBeginOffset + m_contants_size.PassCBSize, sizeof(VertexData));
+	offset.IndexBeginOffset = Align(offset.VertexBeginOffset + m_contants_size.VertexCBSize, sizeof(std::uint16_t));
 	
-	//LogDebug(" Offset : Obj - {} Mat - {} Pass - {} Vertex - {} Index - {} ", offset.ObjectBeginOffset, offset.MatBeginOffset, offset.PassBeginOffset, offset.VertexBeginOffset, offset.IndexBeginOffset);
-
-
 	if (!CanFillFrameRes(m_contants_size, offset) || (m_frame_res_offset.size() >= MaxCommandAllocNum))
 	{
 		//不能填充数据或者命令队列不够用
@@ -1017,6 +1001,7 @@ void CDeferredRenderPipeline::UpdateFrameResource(const GameTimer& gt)
 	}
 	//LogDebug(" [Fill Frame Resource] size {} ", m_frame_res_offset.size());
 	//压入队列
+	LogDebug(" Offset : Obj - {} Mat - {} Pass - {} Vertex - {} Index - {} TotalSize - {} ", offset.ObjectBeginOffset, offset.MatBeginOffset, offset.PassBeginOffset, offset.VertexBeginOffset, offset.IndexBeginOffset, mFrameResources->Size());
 
 	offset.Fence = mCurrentFence;
 

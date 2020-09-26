@@ -37,12 +37,11 @@ struct ClusterChunk
 struct ObjectConstants
 {
 	IndirectCommand DrawCommand;
-	UINT pad0[8];
 	DirectX::XMFLOAT4X4 World = MathHelper::Identity4x4();
 	DirectX::XMFLOAT4X4 TexTransform = MathHelper::Identity4x4();
 	AABB    Bounds;
-	UINT pad1[8];
 	UINT    MaterialIndex;
+	float pad[11];
 };
 
 struct SkinnedConstants
@@ -71,12 +70,13 @@ struct PassConstants
 
 	DirectX::XMFLOAT4 AmbientLight = { 0.0f, 0.0f, 0.0f, 1.0f };
 	UINT ObjectNum = 0;
-	UINT pad[3];
+	UINT pad0[3];
 	// Indices [0, NUM_DIR_LIGHTS) are directional lights;
 	// indices [NUM_DIR_LIGHTS, NUM_DIR_LIGHTS+NUM_POINT_LIGHTS) are point lights;
 	// indices [NUM_DIR_LIGHTS+NUM_POINT_LIGHTS, NUM_DIR_LIGHTS+NUM_POINT_LIGHT+NUM_SPOT_LIGHTS)
 	// are spot lights for a maximum of MaxLights per object.
 	Light Lights[MaxLights];
+	DirectX::XMFLOAT4 pad1[11];
 };
 
 struct SsaoConstants
