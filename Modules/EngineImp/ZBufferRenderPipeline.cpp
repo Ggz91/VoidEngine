@@ -1,4 +1,4 @@
-#include "ZBufferRenderPipeline.h"
+/*#include "ZBufferRenderPipeline.h"
 #include <iostream>
 
 #include "CBaseRenderPipeline.h"
@@ -714,7 +714,6 @@ void CZBufferRenderPipeline::CopyObjectCBData(UINT& begin_index)
 
 			currObjectCB->CopyData(begin_index / UploadBufferChunkSize, &objConstants, objCBByteSize / UploadBufferChunkSize);
 
-			e->NumFramesDirty--;
 		}
 		if ((mAllRitems.size() - 1) != i)
 		{
@@ -805,4 +804,4 @@ UINT CZBufferRenderPipeline::CalCurFrameContantsSize()
 	UINT pass_size = d3dUtil::CalcConstantBufferByteSize(sizeof(PassConstants));
 
 	return object_size + pass_size;
-}
+}*/

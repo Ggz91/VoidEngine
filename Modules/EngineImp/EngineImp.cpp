@@ -11,7 +11,7 @@ CEngine::CEngine(EngineInitParam& init_param)
 	}
 	else
 	{
-		m_render_pipeline = std::make_unique<CZBufferRenderPipeline>(init_param.HInstance, init_param.HWnd);
+		//m_render_pipeline = std::make_unique<CZBufferRenderPipeline>(init_param.HInstance, init_param.HWnd);
 	}
 	m_scene_tree = std::make_unique<QuadTree::CQuadTree>();
 }
@@ -38,7 +38,7 @@ void CEngine::Update(const GameTimer& gt)
 		m_render_pipeline->UpdateCamera(gt);
 		auto culling_res = m_scene_tree->Culling(m_render_pipeline->GetCameraFrustum());
 		m_render_pipeline->ClearVisibleRenderItems();
-		m_render_pipeline->PushVisibleModels((int)RenderLayer::Occluder, culling_res);
+		m_render_pipeline->PushVisibleModels(culling_res);
 	}
 	
 	m_render_pipeline->Update(gt);
@@ -52,7 +52,7 @@ void CEngine::Draw(const GameTimer& gt)
 void CEngine::PushModels(std::vector<RenderItem*>& render_items)
 {
 	m_scene_tree->Init(render_items);
-	m_render_pipeline->PushModels(render_items);
+	m_render_pipeline->PushMats(render_items);
 }
 
 bool CEngine::InitDirect3D()

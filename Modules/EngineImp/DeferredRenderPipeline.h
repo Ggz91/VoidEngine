@@ -5,6 +5,8 @@
 #include "../Common/Camera.h"
 #include "../Common/RenderItems.h"
 #include <queue>
+#include "../Predefines/ScenePredefines.h"
+#include "../Predefines/BufferPredefines.h"
 
 class ShadowMap;
 class Ssao;
@@ -23,7 +25,7 @@ public:
 	~CDeferredRenderPipeline();
 
 	virtual bool Initialize()override;
-	virtual void PushModels(std::vector<RenderItem*>& render_items) override;
+	virtual void PushMats(std::vector<RenderItem*>& render_items) override;
 
 	virtual void PitchCamera(float rad);
 	virtual void RotateCameraY(float rad);
@@ -41,7 +43,7 @@ private:
 	virtual BoundingFrustum GetCameraFrustum() override;
 	virtual DirectX::XMFLOAT3 GetCameraDir();
 	virtual void ClearVisibleRenderItems();
-	virtual void PushVisibleModels(int layer, std::vector<RenderItem*>& render_items, bool add /* = false */) override;
+	virtual void PushVisibleModels(std::map<int,  std::vector<RenderItem*>>& render_items, bool add = false) override;
 	virtual bool InitDirect3D() override;
 	virtual bool IsCameraDirty() override;
 
@@ -53,7 +55,6 @@ private:
 	void BuildFrameResources();
 	void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems, int layer);
 	void PushRenderItems(std::vector<RenderItem*>& render_item);
-	void PushMats(std::vector<RenderItem*>& render_item);
 	CD3DX12_CPU_DESCRIPTOR_HANDLE GetCpuSrv(int index)const;
 	CD3DX12_GPU_DESCRIPTOR_HANDLE GetGpuSrv(int index)const;
 	CD3DX12_CPU_DESCRIPTOR_HANDLE GetDsv(int index)const;
@@ -141,13 +142,13 @@ private:
 
 	std::queue<FrameResourceOffset> m_frame_res_offset;
 	void UpdateFrameResource(const GameTimer& gt);
-	bool CanFillFrameRes(UINT size);
+	bool CanFillFrameRes(FrameResComponentSize& size, FrameResourceOffset& offset);
 	void FreeMemToCompletedFrame(UINT64 frame_index);
-	void CopyFrameRescourceData(const GameTimer& gt, FrameResourceOffset& offset);
-	void CopyObjectCBData(UINT& begin_Index);
-	void CopyMatCBData();
-	void CopyPassCBData(const GameTimer& gt, UINT& begin_index);
-	UINT CalCurFrameContantsSize();
+	void CopyFrameRescourceData(const GameTimer& gt, const FrameResourceOffset& offset);
+	void CopyObjectCBAndVertexData(const FrameResourceOffset& offset);
+	void CopyMatCBData(const FrameResourceOffset& offset);
+	void CopyPassCBData(const GameTimer& gt, const FrameResourceOffset& offset);
+	FrameResComponentSize CalCurFrameContantsSize();
 
 	//hi-z pass
 	void HiZPass();
@@ -165,5 +166,64 @@ private:
 	ComPtr<ID3D12RootSignature> m_hiz_buffer_chain_pass_root_signature = nullptr;
 	int GetRenderLayerObjectOffset(int layer);
 	UINT GetHiZMipmapLevels() const;
+	FrameResComponentSize m_contants_size;
+
+	//instance culling
+	void InstanceHiZCullingPass();
+	void BuildHiZInstanceCullingRootSignature();
+	void BuildHiZInstanceCullingPSO();
+	void CreateHiZInstanceCullingBuffers();
+	ComPtr<ID3D12RootSignature> m_hiz_instance_culling_pass_root_signature = nullptr;
+
+	//instance culling result
+	ComPtr<ID3D12Resource> m_instance_culling_result_buffer;
+	ComPtr<ID3D12Resource> m_counter_reset_buffer;
+	UINT AlignForUavCounter(UINT bufferSize);
+	const int ObjectConstantsBufferOffset = AlignForUavCounter(ScenePredefine::MaxObjectNumPerScene * sizeof(ObjectConstants));
+	const UINT CullingResBufferMaxElementNum = ScenePredefine::MaxMeshVertexNumPerScene / (VertexPerCluster * ClusterPerChunk) + ((ScenePredefine::MaxMeshVertexNumPerScene % (VertexPerCluster * ClusterPerChunk)) ? 1 : 0);
+	const UINT CullingResMaxObjSize = AlignForUavCounter(sizeof(InstanceChunk) * CullingResBufferMaxElementNum);
+	UINT64 AlignForCrvAddress(const D3D12_GPU_VIRTUAL_ADDRESS& address, const UINT& offset);
+	UINT Align(const UINT& size, const UINT& alignment);
+
+	std::vector<RenderItem*> GetVisibleRenderItems();
+
+	//Chunk expan
+	void ChunkExpanPass();
+	void BuildChunkExpanRootSignature();
+	void BuildChunkExpanPSO();
+	void CreateChunExpanBuffer();
+	ComPtr<ID3D12Resource> m_chunk_expan_result_buffer;
+	ComPtr<ID3D12RootSignature> m_chunk_expan_pass_root_signature = nullptr;
+	const UINT ChunkExpanBufferMaxElementNum = ScenePredefine::MaxMeshVertexNumPerScene / VertexPerCluster + ((ScenePredefine::MaxMeshVertexNumPerScene % VertexPerCluster) ? 1 : 0);
+	const UINT ChunkExpanMaxSize = AlignForUavCounter(sizeof(ClusterChunk) * ChunkExpanBufferMaxElementNum);
+
+	
+
+	//Cluster Culling
+	void ClusterHiZCullingPass();
+	void BuildClusterHiZCullingPSO();
+	void BuildClusterHiZCullingRootSignature();
+	void CreateHIZClusterCullingBuffers();
+	ComPtr<ID3D12Resource> m_cluster_culling_result_buffer;
+	ComPtr<ID3D12RootSignature> m_hiz_cluster_culling_pass_root_signature = nullptr;
+	
+	const UINT ClusterCullingResMaxSize = AlignForUavCounter(sizeof(IndirectCommandEx) * ChunkExpanBufferMaxElementNum);
+
+
+	//¶¯Ì¬´´½¨view
+	int m_descriptor_end = 0;
+	CD3DX12_GPU_DESCRIPTOR_HANDLE m_obj_handle;
+	
+	enum HandleOffset
+	{
+		HO_Object = 1,
+		HO_Vertex,
+		HO_Index,
+	};
+
+
+	//execute indirect
+	void BuildCommandSignature();
+	ComPtr<ID3D12CommandSignature> m_command_signauture;
 };
 

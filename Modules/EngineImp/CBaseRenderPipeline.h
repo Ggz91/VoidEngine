@@ -13,6 +13,7 @@
 #include "../Common/GameTimer.h"
 #include "../Common/GeometryDefines.h"
 #include <DirectXCollision.h>
+#include <map>
 
 // Link necessary d3d12 libraries.
 #pragma comment(lib,"d3dcompiler.lib")
@@ -29,7 +30,7 @@ public:
 	virtual void Update(const GameTimer& gt) = 0;
 	virtual void UpdateCamera(const GameTimer& gt) = 0;
 	virtual void Draw(const GameTimer& gt) = 0;
-    virtual void PushModels(std::vector<RenderItem*>& render_items) = 0;
+    virtual void PushMats(std::vector<RenderItem*>& render_items) = 0;
 	virtual bool InitDirect3D() = 0;
 	virtual void Debug() = 0;
 	virtual void PitchCamera(float rad) = 0;
@@ -41,7 +42,7 @@ public:
 	virtual DirectX::BoundingFrustum GetCameraFrustum() = 0;
 	virtual DirectX::XMFLOAT3 GetCameraDir() = 0;
 	virtual void ClearVisibleRenderItems() = 0;
-	virtual void PushVisibleModels(int layer, std::vector<RenderItem*>& render_items, bool add = false) = 0;
+	virtual void PushVisibleModels(std::map<int,  std::vector<RenderItem*>>& render_items, bool add = false) = 0;
 	virtual bool IsCameraDirty() = 0;
 
 };
@@ -67,7 +68,7 @@ public:
     void Set4xMsaaState(bool value);
 	virtual bool InitDirect3D();
 	virtual bool Initialize();
-    virtual void PushModels(std::vector<RenderItem*>& render_items) = 0;
+    virtual void PushMats(std::vector<RenderItem*>& render_items) = 0;
 	virtual void PitchCamera(float rad) = 0;
 	virtual void RotateCameraY(float rad) = 0;
 	virtual void MoveCamera(float dis) = 0;
@@ -83,7 +84,7 @@ protected:
 	virtual DirectX::BoundingFrustum GetCameraFrustum() = 0;
 	virtual DirectX::XMFLOAT3 GetCameraDir() = 0;
 	virtual void ClearVisibleRenderItems() = 0;
-	virtual void PushVisibleModels(int layer, std::vector<RenderItem*>& render_items, bool add = false) = 0;
+	virtual void PushVisibleModels(std::map<int,  std::vector<RenderItem*>>& render_items, bool add = false) = 0;
 	virtual bool IsCameraDirty() = 0;
 
 protected:

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "../Logger/spdlog/spdlog.h"
 
 class LoggerWrapper
@@ -7,13 +7,13 @@ public:
 	static LoggerWrapper* Instance();
 	LoggerWrapper();
 public:
-	//��Ҫ�Ľӿ�
-	template<typename Fmt, typename... Args> 
-	void LogInfo(Fmt&& fmt, Args &&... args);
-	
+	//主要的接口
 	template<typename Fmt, typename... Args>
-	void LogDebug(Fmt&& fmt,Args&&... args); 
-	
+	void LogInfo(Fmt&& fmt, Args&&... args);
+
+	template<typename Fmt, typename... Args>
+	void LogDebug(Fmt&& fmt, Args&&... args);
+
 	template<typename Fmt, typename... Args>
 	void LogWarning(Fmt&& fmt, Args&&... args);
 
@@ -39,7 +39,7 @@ void LoggerWrapper::LogWarning(Fmt&& fmt, Args&&... args)
 }
 
 template<typename Fmt, typename... Args>
-void LoggerWrapper::LogDebug(Fmt&& fmt,Args&&... args)
+void LoggerWrapper::LogDebug(Fmt&& fmt, Args&&... args)
 {
 	spdlog::get("console")->debug(fmt, args...);
 	spdlog::get("file_logger")->debug(fmt, args...);
@@ -58,5 +58,3 @@ void LoggerWrapper::LogInfo(Fmt&& fmt, Args&&... args)
 #define LogInfo(fmt, ...) Logger->LogInfo(fmt, ##__VA_ARGS__)
 #define LogWarn(fmt, ...) Logger->LogWarn(fmt, ##__VA_ARGS__)
 #define LogError(fmt, ...) Logger->LogError(fmt, ##__VA_ARGS__)
-
-
