@@ -1197,23 +1197,20 @@ void CDeferredRenderPipeline::CopyMatCBData(const FrameResourceOffset& offset)
 	for (auto& e : mMaterials)
 	{
 		Material* mat = e.second;
-		if (mat->NumFramesDirty > 0)
-		{
-			XMMATRIX matTransform = XMLoadFloat4x4(&mat->MatTransform);
+		XMMATRIX matTransform = XMLoadFloat4x4(&mat->MatTransform);
 
-			MatData matData;
-			matData.DiffuseAlbedo = mat->DiffuseAlbedo;
-			matData.FresnelR0 = mat->FresnelR0;
-			matData.Roughness = mat->Roughness;
-			XMStoreFloat4x4(&matData.MatTransform, XMMatrixTranspose(matTransform));
-			matData.DiffuseMapIndex = mat->DiffuseSrvHeapIndex;
-			matData.NormalMapIndex = mat->NormalSrvHeapIndex;
+		MatData matData;
+		matData.DiffuseAlbedo = mat->DiffuseAlbedo;
+		matData.FresnelR0 = mat->FresnelR0;
+		matData.Roughness = mat->Roughness;
+		XMStoreFloat4x4(&matData.MatTransform, XMMatrixTranspose(matTransform));
+		matData.DiffuseMapIndex = mat->DiffuseSrvHeapIndex;
+		matData.NormalMapIndex = mat->NormalSrvHeapIndex;
 
 
-			currMaterialBuffer->CopyData(mat->MatCBIndex * sizeof(MatData) + offset.MatBeginOffset, &matData, sizeof(MatData));
+		currMaterialBuffer->CopyData(mat->MatCBIndex * sizeof(MatData) + offset.MatBeginOffset, &matData, sizeof(MatData));
 
-			mat->NumFramesDirty--;
-		}
+		mat->NumFramesDirty--;
 	}
 }
 
