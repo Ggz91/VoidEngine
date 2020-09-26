@@ -984,7 +984,7 @@ void CDeferredRenderPipeline::UpdateFrameResource(const GameTimer& gt)
 	{
 		//初始值
 		offset.ObjectBeginOffset = m_frame_res_offset.empty() ? 0 : Align(m_frame_res_offset.back().EndResOffset, sizeof(ObjectConstants));
-		offset.MatBeginOffset = offset.ObjectBeginOffset + m_contants_size.ObjectCBSize;
+		offset.MatBeginOffset = Align(offset.ObjectBeginOffset + m_contants_size.ObjectCBSize, sizeof(MatData));
 		offset.PassBeginOffset = AlignForCrvAddress(mFrameResources->FrameResCB->Resource()->GetGPUVirtualAddress(), offset.MatBeginOffset + m_contants_size.MatCBSize);
 		offset.VertexBeginOffset = Align(offset.PassBeginOffset + m_contants_size.PassCBSize, sizeof(VertexData));
 		offset.IndexBeginOffset = Align(offset.VertexBeginOffset + m_contants_size.VertexCBSize, sizeof(std::uint16_t));
@@ -1047,7 +1047,7 @@ bool CDeferredRenderPipeline::CanFillFrameRes(FrameResComponentSize& size, Frame
 	if (tail_index <= mFrameResources->Size())
 	{
 		//在Object区后还有位置
-		offset.MatBeginOffset = tail_index;
+		offset.MatBeginOffset = Align(tail_index, sizeof(MatData));
 		tail_index += size.MatCBSize;
 		if (tail_index <= mFrameResources->Size())
 		{
@@ -1117,7 +1117,7 @@ bool CDeferredRenderPipeline::CanFillFrameRes(FrameResComponentSize& size, Frame
 	{
 		//object buffer也要是连续的
 		offset.ObjectBeginOffset = 0;
-		offset.MatBeginOffset = offset.ObjectBeginOffset + size.ObjectCBSize;
+		offset.MatBeginOffset = Align(offset.ObjectBeginOffset + size.ObjectCBSize, sizeof(MatData));
 		offset.PassBeginOffset = AlignForCrvAddress(mFrameResources->FrameResCB->Resource()->GetGPUVirtualAddress(), offset.MatBeginOffset + size.MatCBSize);
 		if (offset.PassBeginOffset + size.PassCBSize + size.VertexCBSize + size.IndexCBSize >= m_frame_res_offset.front().ObjectBeginOffset)
 		{
@@ -1141,15 +1141,9 @@ void CDeferredRenderPipeline::FreeMemToCompletedFrame(UINT64 frame_index)
 
 void CDeferredRenderPipeline::CopyFrameRescourceData(const GameTimer& gt, const FrameResourceOffset& offset)
 {
-	static bool dirty = false;
-	if (dirty)
-	{
-		return;
-	}
 	CopyPassCBData(gt, offset);
 	CopyObjectCBAndVertexData(offset);
 	CopyMatCBData(offset);
-	dirty = true;
 }
 
 void CDeferredRenderPipeline::CopyObjectCBAndVertexData(const FrameResourceOffset& offset)
