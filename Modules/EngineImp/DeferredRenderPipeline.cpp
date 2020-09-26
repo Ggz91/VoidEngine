@@ -784,7 +784,7 @@ void CDeferredRenderPipeline::DeferredDrawFillGBufferPass()
 			mRtvDescriptorSize);
 		mCommandList->ClearRenderTargetView(handle, Colors::LightSteelBlue, 0, nullptr);
 	}
-	//mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+	mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 
 	CD3DX12_CPU_DESCRIPTOR_HANDLE g_buffer_handle(mRtvHeap->GetCPUDescriptorHandleForHeapStart(),
 		SwapChainBufferCount,
@@ -1001,7 +1001,7 @@ void CDeferredRenderPipeline::UpdateFrameResource(const GameTimer& gt)
 	}
 	//LogDebug(" [Fill Frame Resource] size {} ", m_frame_res_offset.size());
 	//压入队列
-	LogDebug(" Offset : Obj - {} Mat - {} Pass - {} Vertex - {} Index - {} TotalSize - {} ", offset.ObjectBeginOffset, offset.MatBeginOffset, offset.PassBeginOffset, offset.VertexBeginOffset, offset.IndexBeginOffset, mFrameResources->Size());
+	//LogDebug(" Offset : Obj - {} Mat - {} Pass - {} Vertex - {} Index - {} TotalSize - {} ", offset.ObjectBeginOffset, offset.MatBeginOffset, offset.PassBeginOffset, offset.VertexBeginOffset, offset.IndexBeginOffset, mFrameResources->Size());
 
 	offset.Fence = mCurrentFence;
 
@@ -1548,7 +1548,7 @@ void CDeferredRenderPipeline::InstanceHiZCullingPass()
 	obj_srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 	obj_srv_desc.Format = DXGI_FORMAT_UNKNOWN;
 	obj_srv_desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-	obj_srv_desc.Buffer.FirstElement = cur_offset.ObjectBeginOffset / sizeof(ObjectConstants) + GetRenderLayerObjectOffset((int)RenderLayer::Opaque);
+	obj_srv_desc.Buffer.FirstElement = cur_offset.ObjectBeginOffset / sizeof(ObjectConstants);
 	obj_srv_desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 	obj_srv_desc.Buffer.NumElements = ScenePredefine::MaxObjectNumPerScene;
 	obj_srv_desc.Buffer.StructureByteStride = sizeof(ObjectConstants);
